@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
+from app.core.middleware import IPAccessMiddleware
 from app.api.router import api_router
 from app.ws.router import router as ws_router
 from app.db.redis import redis_manager
@@ -42,6 +43,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# IP Blacklist / Whitelist Middleware
+app.add_middleware(IPAccessMiddleware)
 
 # Include API Router and WebSockets Router
 app.include_router(api_router)

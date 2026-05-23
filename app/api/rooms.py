@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 from app.db.database import get_db
+from app.auth.jwt import get_current_username
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
 
@@ -32,7 +33,11 @@ class MessageResponse(BaseModel):
         from_attributes = True
 
 @router.post("/", response_model=RoomResponse, status_code=status.HTTP_201_CREATED)
-async def create_room(room_data: RoomCreate, db: AsyncSession = Depends(get_db)):
+async def create_room(
+    room_data: RoomCreate, 
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(get_current_username)
+):
     """Create a new chat room/channel."""
     # TODO: Implement database insertion
     return RoomResponse(
@@ -43,13 +48,21 @@ async def create_room(room_data: RoomCreate, db: AsyncSession = Depends(get_db))
     )
 
 @router.get("/", response_model=List[RoomResponse])
-async def list_rooms(db: AsyncSession = Depends(get_db)):
+async def list_rooms(
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(get_current_username)
+):
     """Fetch all available rooms."""
     # TODO: Implement list retrieval
     return []
 
 @router.get("/{room_id}/messages", response_model=List[MessageResponse])
-async def get_messages(room_id: int, limit: int = 50, db: AsyncSession = Depends(get_db)):
+async def get_messages(
+    room_id: int, 
+    limit: int = 50, 
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(get_current_username)
+):
     """Fetch message history for a specific room."""
     # TODO: Implement historical message query
     return []

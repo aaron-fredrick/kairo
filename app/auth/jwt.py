@@ -2,7 +2,14 @@ from datetime import datetime, timedelta
 from typing import Optional, Union, Dict, Any
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.core.config import settings
+from redis.asyncio import Redis
+from app.db.redis import get_redis
+from app.services.auth_service import auth_service
+
+security = HTTPBearer()
 
 # Password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -34,3 +41,35 @@ def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
         return payload
     except JWTError:
         return None
+
+async def get_current_username(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    redis: Redis = Depends(get_redis)
+) -> str:
+    token = credentials.credentials
+    payload = decode_access_token(token)
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    username: str = payload.get("sub")
+    if username is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload",
+        )
+        
+    # Check if user is still active in Redis
+    current_time = __import__('time').time()
+    score = await redis.zscore("active_users", username)
+    if score is None or score < current_time:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired, please join again",
+        )
+        
+    # Refresh activity
+    await auth_service.refresh_user_activity(redis, username)
+    return username
