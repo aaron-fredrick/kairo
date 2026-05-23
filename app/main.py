@@ -1,60 +1,66 @@
+import os
 from contextlib import asynccontextmanager
+from typing import AsyncIterator
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from app.core.config import settings
-from app.core.middleware import IPAccessMiddleware
+from sqlalchemy import text
+
 from app.api.router import api_router
-from app.ws.router import router as ws_router
-from app.db.redis import redis_manager
+from app.core.config import settings
+from app.core.logging import get_logger
+from app.core.middleware import IPAccessMiddleware
 from app.db.database import engine
-import os
+from app.db.redis import redis_manager
+from app.ws.router import router as ws_router
+
+logger = get_logger(__name__)
+
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup sequence:
-    # 1. Initialize Redis connection
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    logger.info("Starting Kairo server (env=%s, debug=%s)", settings.ENV, settings.DEBUG)
+
+    logger.debug("Connecting to Redis at %s", settings.REDIS_URL)
     redis_manager.connect()
-    # 2. Verify database connection pool
+    logger.info("Redis connection established")
+
+    logger.debug("Verifying PostgreSQL connection at %s", settings.DATABASE_URL)
     async with engine.begin() as conn:
-        # Simple test query to ensure connection is working
-        await conn.execute("SELECT 1")
-    
+        await conn.execute(text("SELECT 1"))
+    logger.info("PostgreSQL connection pool ready")
+
     yield
-    
-    # Shutdown sequence:
-    # 1. Close Redis connection
+
+    logger.info("Shutting down Kairo server")
     await redis_manager.disconnect()
-    # 2. Close PostgreSQL connection pool
+    logger.debug("Redis connection closed")
+
     await engine.dispose()
+    logger.debug("PostgreSQL connection pool disposed")
+
 
 app = FastAPI(
     title="Kairo API",
     description="Realtime chat communication server",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
-# CORS Configuration for local frontend development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In production, restrict to allowed origins
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# IP Blacklist / Whitelist Middleware
 app.add_middleware(IPAccessMiddleware)
 
-# Include API Router and WebSockets Router
 app.include_router(api_router)
 app.include_router(ws_router)
 
-# Mount frontend static assets if the folder exists, otherwise create a placeholder
 static_dir = os.path.join(os.path.dirname(__file__), "static")
-if not os.path.exists(static_dir):
-    os.makedirs(static_dir, exist_ok=True)
-
-# Mount static serving
+os.makedirs(static_dir, exist_ok=True)
 app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")

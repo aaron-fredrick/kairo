@@ -1,65 +1,80 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query
-from app.ws.connection_manager import manager
-from app.db.redis import get_redis
-from app.auth.jwt import decode_access_token
-from app.services.auth_service import auth_service
-import redis.asyncio as aioredis
 import json
 import time
 
+import redis.asyncio as aioredis
+from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
+
+from app.auth.jwt import decode_access_token
+from app.core.logging import get_logger
+from app.db.redis import get_redis
+from app.services.auth_service import auth_service
+from app.ws.connection_manager import manager
+
+logger = get_logger(__name__)
+
 router = APIRouter(prefix="/ws", tags=["websockets"])
+
 
 @router.websocket("/chat/{room_id}")
 async def websocket_endpoint(
-    websocket: WebSocket, 
-    room_id: int, 
+    websocket: WebSocket,
+    room_id: int,
     token: str = Query(None),
-    redis_client: aioredis.Redis = Depends(get_redis)
-):
-    """Handle incoming websocket connection, receive events, and handle client disconnection."""
+    redis_client: aioredis.Redis = Depends(get_redis),
+) -> None:
+    """
+    Authenticated WebSocket endpoint for real-time room chat.
+
+    Authentication is performed via a token query parameter. The connection is
+    rejected with close code 1008 (policy violation) if the token is absent,
+    invalid, or the session has expired in Redis.
+    """
+    client_host = websocket.client.host if websocket.client else "unknown"
+
     if not token:
+        logger.warning("WS connection rejected (no token): room_id=%d host=%s", room_id, client_host)
         await websocket.close(code=1008)
         return
-        
+
     payload = decode_access_token(token)
     if not payload or "sub" not in payload:
+        logger.warning("WS connection rejected (invalid token): room_id=%d host=%s", room_id, client_host)
         await websocket.close(code=1008)
         return
-        
-    username = payload["sub"]
-    
-    # Check if user is active in Redis
-    current_time = time.time()
+
+    username: str = payload["sub"]
+
     score = await redis_client.zscore("active_users", username)
-    if score is None or score < current_time:
+    if score is None or score < time.time():
+        logger.info(
+            "WS connection rejected (session expired): user='%s' room_id=%d", username, room_id
+        )
         await websocket.close(code=1008)
         return
-        
+
     await manager.connect(websocket, room_id)
     await auth_service.refresh_user_activity(redis_client, username)
+    logger.info("WS connected: user='%s' room_id=%d host=%s", username, room_id, client_host)
+
     try:
         while True:
-            # Wait for any message from the client
             data = await websocket.receive_text()
-            
-            # TODO: Parse event data, validate authentication, store in DB, publish to Redis
-            # Example message format expected: {"event": "message", "content": "hello"}
+            logger.debug("WS message received from '%s' in room_id=%d", username, room_id)
+
             try:
-                event_data = json.loads(data)
-                
-                # Refresh activity on message
-                await auth_service.refresh_user_activity(redis_client, username)
-                
-                # Add sender info
-                event_data["sender"] = username
-                
-                # For now, echo the message locally as placeholder
-                await manager.broadcast_to_local(json.dumps(event_data), room_id)
+                event_data: dict = json.loads(data)
             except json.JSONDecodeError:
+                logger.debug("WS invalid JSON from '%s'", username)
                 await manager.send_personal_message(
-                    json.dumps({"error": "Invalid JSON format"}), 
-                    websocket
+                    json.dumps({"error": "Invalid JSON format"}),
+                    websocket,
                 )
+                continue
+
+            await auth_service.refresh_user_activity(redis_client, username)
+            event_data["sender"] = username
+            await manager.broadcast_to_local(json.dumps(event_data), room_id)
+
     except WebSocketDisconnect:
         manager.disconnect(websocket, room_id)
-        # TODO: Handle offline presence updating
+        logger.info("WS disconnected: user='%s' room_id=%d", username, room_id)
