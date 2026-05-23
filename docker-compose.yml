@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: kairo_db
+    restart: always
+    environment:
+      POSTGRES_USER: kairo
+      POSTGRES_PASSWORD: kairo_password
+      POSTGRES_DB: kairo
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kairo"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: kairo_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: infra/docker/app.Dockerfile
+    container_name: kairo_app
+    restart: always
+    environment:
+      - ENV=production
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=kairo
+      - DB_PASSWORD=kairo_password
+      - DB_NAME=kairo
+      - DATABASE_URL=postgresql+asyncpg://kairo:kairo_password@db:5432/kairo
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET=change_me_in_prod_987654321
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:
