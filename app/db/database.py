@@ -3,13 +3,19 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sess
 from sqlalchemy.orm import DeclarativeBase
 from app.core.config import settings
 
+# Select DB URL and engine arguments based on settings
+db_url = settings.SQLITE_URL if settings.USE_SQLITE else settings.DATABASE_URL
+engine_kwargs = {"echo": settings.DEBUG, "future": True}
+
+if settings.USE_SQLITE:
+    # SQLite-specific arguments
+    engine_kwargs["connect_args"] = {"check_same_thread": False}
+else:
+    # Postgres-specific arguments
+    engine_kwargs["pool_pre_ping"] = True
+
 # Create asynchronous engine
-engine = create_async_engine(
-    settings.DATABASE_URL,
-    echo=settings.DEBUG,
-    future=True,
-    pool_pre_ping=True
-)
+engine = create_async_engine(db_url, **engine_kwargs)
 
 # Async session factory
 AsyncSessionLocal = async_sessionmaker(

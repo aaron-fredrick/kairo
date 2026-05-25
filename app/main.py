@@ -22,14 +22,25 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("Starting Kairo server (env=%s, debug=%s)", settings.ENV, settings.DEBUG)
 
-    logger.debug("Connecting to Redis at %s", settings.REDIS_URL)
+    if settings.USE_REDIS:
+        logger.debug("Connecting to Redis at %s", settings.REDIS_URL)
+    else:
+        logger.debug("Using mock in-memory Redis")
     redis_manager.connect()
     logger.info("Redis connection established")
 
-    logger.debug("Verifying PostgreSQL connection at %s", settings.DATABASE_URL)
-    async with engine.begin() as conn:
-        await conn.execute(text("SELECT 1"))
-    logger.info("PostgreSQL connection pool ready")
+    if settings.USE_SQLITE:
+        logger.debug("Verifying SQLite connection at %s", settings.SQLITE_URL)
+        from app.db.database import Base
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+            await conn.execute(text("SELECT 1"))
+        logger.info("SQLite connection ready")
+    else:
+        logger.debug("Verifying PostgreSQL connection at %s", settings.DATABASE_URL)
+        async with engine.begin() as conn:
+            await conn.execute(text("SELECT 1"))
+        logger.info("PostgreSQL connection pool ready")
 
     yield
 
@@ -38,7 +49,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.debug("Redis connection closed")
 
     await engine.dispose()
-    logger.debug("PostgreSQL connection pool disposed")
+    logger.debug("Database connection pool disposed")
 
 
 app = FastAPI(
