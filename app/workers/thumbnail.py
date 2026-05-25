@@ -35,6 +35,8 @@ class ThumbnailJob:
     file_data: bytes
     mime_type: str
     extension: str
+    room_id: int = 0
+
 
 
 # ---- Global queue ----------------------------------------------------------
@@ -80,19 +82,32 @@ async def _process_job(job: ThumbnailJob, storage: StorageBackend) -> None:
         upload.thumbnail_sha256_lg = sha256s.get("lg")
         await db.commit()
 
-    # Notify Redis (if available) so connected WebSocket clients can refresh
-    redis = redis_manager.get_client()
-    try:
-        from app.db.redis import MockRedis
-        if not isinstance(redis, MockRedis):
-            await redis.publish(
-                f"thumbnails:{job.hash_id}",
-                "ready",
-            )
-    except Exception as exc:
-        logger.warning("Thumbnail worker: Redis publish failed: %s", exc)
+    from app.workers.broadcast import BroadcastJob, broadcast_queue
+    from app.core.config import settings
 
-    logger.info("Thumbnail worker: completed hash_id='%s'", job.hash_id)
+    thumb_base = settings.UPLOAD_BASE_URL.rstrip("/")
+    thumbnail_urls = {
+        label: f"{thumb_base}/thumbnails/{job.hash_id}_{w}x{h}.jpeg"
+        for label, (w, h) in THUMBNAIL_SIZES.items()
+    }
+
+    await broadcast_queue.put(
+        BroadcastJob(
+            room_id=job.room_id,
+            event_type="thumbnails_ready",
+            payload={
+                "hash_id": job.hash_id,
+                "thumbnails": thumbnail_urls,
+                "thumbnail_sha256": {
+                    "sm": sha256s.get("sm"),
+                    "md": sha256s.get("md"),
+                    "lg": sha256s.get("lg"),
+                },
+            },
+        )
+    )
+    logger.info("Thumbnail worker: completed hash_id='%s' — broadcast queued", job.hash_id)
+
 
 
 async def run_thumbnail_worker(storage: StorageBackend) -> None:

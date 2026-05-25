@@ -27,12 +27,17 @@ from app.core.logging import get_logger
 from app.db.database import get_db
 from app.models.upload import Upload
 from app.storage.backends import storage_backend
+from app.workers.broadcast import BroadcastJob, broadcast_queue
 from app.workers.thumbnail import ThumbnailJob, thumbnail_queue
 from app.services.thumbnail_service import THUMBNAIL_SIZES
 
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/uploads", tags=["uploads"])
+
+# Room ID used when no specific room context is provided — broadcasts to room 0
+# so server-wide listeners receive the event.
+_GLOBAL_ROOM_ID = 0
 
 
 # ---------------------------------------------------------------------------
@@ -87,11 +92,15 @@ def _guess_mime(filename: str, default: str = "application/octet-stream") -> str
 @router.post("/", response_model=UploadResponse, status_code=status.HTTP_201_CREATED)
 async def upload_file(
     file: UploadFile,
+    room_id: int = 0,
     db: AsyncSession = Depends(get_db),
     _username: str = Depends(get_current_username),
 ) -> UploadResponse:
     """
     Accept a file upload, persist it, and return its URLs.
+
+    Pass `room_id` to broadcast the upload event to that room's connected
+    WebSocket clients.  Omit it (defaults to 0) for a server-wide broadcast.
 
     Thumbnail generation happens asynchronously in the background — the
     response is returned immediately with pre-computed (assumed) thumbnail URLs.
@@ -153,9 +162,32 @@ async def upload_file(
             file_data=data,
             mime_type=mime_type,
             extension=extension,
+            room_id=room_id,
         )
     )
     logger.debug("Thumbnail job queued for hash_id='%s'", hash_id)
+
+    # Immediately broadcast the upload event so WS clients learn about the file
+    # before thumbnails are ready.  room_id=0 signals a server-wide event;
+    # callers should pass a room_id query param when a specific room context exists.
+    thumb_urls = _derive_thumbnail_urls(hash_id)
+    await broadcast_queue.put(
+        BroadcastJob(
+            room_id=room_id,
+            event_type="file_uploaded",
+            payload={
+                "hash_id": hash_id,
+                "filename": original_filename,
+                "extension": extension,
+                "mime_type": mime_type,
+                "size_bytes": size_bytes,
+                "file_url": f"{settings.UPLOAD_BASE_URL.rstrip('/')}/files/{hash_id}",
+                "thumbnails": thumb_urls.model_dump(),
+                "thumbnails_ready": False,
+            },
+        )
+    )
+    logger.debug("Broadcast job queued for hash_id='%s' (file_uploaded)", hash_id)
 
     return _build_response(upload)
 

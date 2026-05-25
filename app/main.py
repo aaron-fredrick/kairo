@@ -16,6 +16,7 @@ from app.db.database import engine
 from app.db.redis import redis_manager
 from app.storage.backends import storage_backend
 from app.workers.thumbnail import run_thumbnail_worker
+from app.workers.broadcast import run_broadcast_worker
 from app.ws.router import router as ws_router
 
 logger = get_logger(__name__)
@@ -47,17 +48,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     worker_task = asyncio.create_task(run_thumbnail_worker(storage_backend))
     logger.info("Thumbnail worker spawned")
+    
+    broadcast_task = asyncio.create_task(run_broadcast_worker())
+    logger.info("Broadcast worker spawned")
 
     yield
 
     logger.info("Shutting down Kairo server")
 
     worker_task.cancel()
+    broadcast_task.cancel()
     try:
-        await worker_task
+        await asyncio.gather(worker_task, broadcast_task, return_exceptions=True)
     except asyncio.CancelledError:
         pass
-    logger.debug("Thumbnail worker stopped")
+    logger.debug("Background workers stopped")
 
     await redis_manager.disconnect()
     logger.debug("Redis connection closed")
