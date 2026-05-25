@@ -1,3 +1,4 @@
+import asyncio
 import os
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
@@ -13,6 +14,8 @@ from app.core.logging import get_logger
 from app.core.middleware import IPAccessMiddleware
 from app.db.database import engine
 from app.db.redis import redis_manager
+from app.storage.backends import storage_backend
+from app.workers.thumbnail import run_thumbnail_worker
 from app.ws.router import router as ws_router
 
 logger = get_logger(__name__)
@@ -42,9 +45,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             await conn.execute(text("SELECT 1"))
         logger.info("PostgreSQL connection pool ready")
 
+    worker_task = asyncio.create_task(run_thumbnail_worker(storage_backend))
+    logger.info("Thumbnail worker spawned")
+
     yield
 
     logger.info("Shutting down Kairo server")
+
+    worker_task.cancel()
+    try:
+        await worker_task
+    except asyncio.CancelledError:
+        pass
+    logger.debug("Thumbnail worker stopped")
+
     await redis_manager.disconnect()
     logger.debug("Redis connection closed")
 
@@ -71,6 +85,12 @@ app.add_middleware(IPAccessMiddleware)
 
 app.include_router(api_router)
 app.include_router(ws_router)
+
+# Serve uploads directory — files and thumbnails accessible via HTTP
+uploads_dir = os.path.abspath(settings.UPLOAD_LOCAL_DIR)
+os.makedirs(os.path.join(uploads_dir, "files"), exist_ok=True)
+os.makedirs(os.path.join(uploads_dir, "thumbnails"), exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 os.makedirs(static_dir, exist_ok=True)

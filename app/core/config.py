@@ -51,6 +51,26 @@ class Settings(BaseSettings):
     REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
     REDIS_URL: str = os.getenv("REDIS_URL", f"redis://{os.getenv('REDIS_HOST', 'localhost')}:{os.getenv('REDIS_PORT', '6379')}/0")
 
+    # Upload / File Storage
+    UPLOAD_BACKEND: str = os.getenv("UPLOAD_BACKEND", "local")   # local | s3 | ftp
+    UPLOAD_LOCAL_DIR: str = os.getenv("UPLOAD_LOCAL_DIR", "uploads")
+    UPLOAD_MAX_SIZE_MB: int = int(os.getenv("UPLOAD_MAX_SIZE_MB", "50"))
+    UPLOAD_BASE_URL: str = os.getenv("UPLOAD_BASE_URL", "http://localhost:8000/uploads")
+
+    # S3 Storage (when UPLOAD_BACKEND=s3)
+    S3_BUCKET: str = os.getenv("S3_BUCKET", "")
+    S3_REGION: str = os.getenv("S3_REGION", "us-east-1")
+    S3_ACCESS_KEY: str = os.getenv("S3_ACCESS_KEY", "")
+    S3_SECRET_KEY: str = os.getenv("S3_SECRET_KEY", "")
+    S3_ENDPOINT_URL: Optional[str] = os.getenv("S3_ENDPOINT_URL")  # for MinIO etc.
+
+    # FTP Storage (when UPLOAD_BACKEND=ftp)
+    FTP_HOST: str = os.getenv("FTP_HOST", "localhost")
+    FTP_PORT: int = int(os.getenv("FTP_PORT", "21"))
+    FTP_USER: str = os.getenv("FTP_USER", "")
+    FTP_PASSWORD: str = os.getenv("FTP_PASSWORD", "")
+    FTP_REMOTE_DIR: str = os.getenv("FTP_REMOTE_DIR", "/uploads")
+
     # JWT Authentication
     JWT_SECRET: str = os.getenv("JWT_SECRET", "super_secret_jwt_key_change_me_in_production_1234567890")
     JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
