@@ -14,7 +14,7 @@ cd frontend || exit 1
 # Install dependencies if node_modules doesn't exist
 if [ ! -d "node_modules" ]; then
     echo "First time setup: Installing npm dependencies..."
-    npm install
+    npm install --legacy-peer-deps
 fi
 
 echo "Launching Vite dev server on http://localhost:5173..."

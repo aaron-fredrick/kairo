@@ -12,7 +12,7 @@ if not exist "frontend\" (
 cd frontend || exit /b 1
 
 echo Installing npm dependencies...
-call npm install
+call npm install --legacy-peer-deps
 
 echo Compiling static assets...
 call npm run build

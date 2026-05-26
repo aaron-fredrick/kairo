@@ -12,7 +12,7 @@ fi
 cd frontend || exit 1
 
 echo "Installing npm dependencies..."
-npm install
+npm install --legacy-peer-deps
 
 echo "Compiling static assets..."
 npm run build
