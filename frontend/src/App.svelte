@@ -35,9 +35,13 @@
   
   onMount(async () => {
     // 1. Fetching from the backend API using relative paths
-    // This goes through Caddy (port 80) or Vite Proxy (port 5173) cleanly to your backend
+    // The ngrok-skip-browser-warning header ensures ngrok's anti-abuse screen doesn't block API calls
     try {
-      const response = await fetch('/api/v1/rooms');
+      const response = await fetch('/api/v1/rooms', {
+        headers: {
+          'ngrok-skip-browser-warning': 'true'
+        }
+      });
       if (response.ok) {
         const data = await response.json();
         console.log("Rooms loaded from API:", data);
