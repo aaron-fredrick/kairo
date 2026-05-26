@@ -75,4 +75,4 @@ fi
 
 echo "Services are up."
 echo "Starting Kairo development server on http://localhost:8000..."
-uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload --proxy-headers --forwarded-allow-ips "*"
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload --proxy-headers
