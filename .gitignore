@@ -51,5 +51,6 @@ frontend/build/
 *.swp
 *~
 
-# Caddy
+# Caddy / Tunnels
 Caddyfile
+ngrok.yml
