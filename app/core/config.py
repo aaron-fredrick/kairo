@@ -41,7 +41,7 @@ class Settings(BaseSettings):
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
 
     # Database Settings
-    USE_SQLITE: bool = os.getenv("USE_SQLITE", "False").lower() in ("true", "1", "t", "yes", "y")
+    DB_BACKEND: str = os.getenv("DB_BACKEND", "postgres")  # "sqlite" | "postgres"
     SQLITE_URL: str = os.getenv("SQLITE_URL", "sqlite+aiosqlite:///./kairo.db")
 
     DB_HOST: str = os.getenv("DB_HOST", "localhost")
@@ -52,7 +52,10 @@ class Settings(BaseSettings):
     DATABASE_URL: str = os.getenv("DATABASE_URL", f"postgresql+asyncpg://{os.getenv('DB_USER', 'kairo')}:{os.getenv('DB_PASSWORD', 'kairo_password')}@{os.getenv('DB_HOST', 'localhost')}:{os.getenv('DB_PORT', '5432')}/{os.getenv('DB_NAME', 'kairo')}")
 
     # Redis Settings
-    USE_REDIS: bool = os.getenv("USE_REDIS", "True").lower() in ("true", "1", "t", "yes", "y")
+    @property
+    def USE_REDIS(self) -> bool:
+        return self.EVENT_BUS == "redis"
+
     REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
     REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
     REDIS_URL: str = os.getenv("REDIS_URL", f"redis://{os.getenv('REDIS_HOST', 'localhost')}:{os.getenv('REDIS_PORT', '6379')}/0")

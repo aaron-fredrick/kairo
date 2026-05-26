@@ -4,10 +4,10 @@ from sqlalchemy.orm import DeclarativeBase
 from app.core.config import settings
 
 # Select DB URL and engine arguments based on settings
-db_url = settings.SQLITE_URL if settings.USE_SQLITE else settings.DATABASE_URL
+db_url = settings.SQLITE_URL if settings.DB_BACKEND == "sqlite" else settings.DATABASE_URL
 engine_kwargs = {"echo": settings.DEBUG, "future": True}
 
-if settings.USE_SQLITE:
+if settings.DB_BACKEND == "sqlite":
     # SQLite-specific arguments
     engine_kwargs["connect_args"] = {"check_same_thread": False}
 else:

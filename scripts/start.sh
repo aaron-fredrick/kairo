@@ -4,6 +4,14 @@
 export ENV=development
 export DEBUG=true
 
+# Load .env variables if present
+if [ -f .env ]; then
+    export $(grep -v '^#' .env | xargs)
+fi
+
+DB_BACKEND=${DB_BACKEND:-postgres}
+EVENT_BUS=${EVENT_BUS:-local}
+
 check_postgres() {
     PGPASSWORD=kairo_password psql -h 127.0.0.1 -U kairo -d kairo -c "SELECT 1;" >/dev/null 2>&1 || \
     psql -U postgres -c "SELECT 1;" >/dev/null 2>&1
@@ -17,11 +25,16 @@ check_redis() {
 PG_UP=true
 REDIS_UP=true
 
-check_postgres || PG_UP=false
-check_redis || REDIS_UP=false
+if [ "$DB_BACKEND" != "sqlite" ]; then
+    check_postgres || PG_UP=false
+fi
+
+if [ "$EVENT_BUS" == "redis" ]; then
+    check_redis || REDIS_UP=false
+fi
 
 if [ "$PG_UP" = false ] || [ "$REDIS_UP" = false ]; then
-    echo "Required services (Postgres and/or Redis) are not running locally."
+    echo "Required services are not running locally."
     echo "Attempting to start them via docker-compose..."
     
     if [ "$PG_UP" = false ] && [ "$REDIS_UP" = false ]; then
@@ -35,8 +48,15 @@ if [ "$PG_UP" = false ] || [ "$REDIS_UP" = false ]; then
     echo "Waiting for services to initialize..."
     for i in {1..15}; do
         sleep 1
-        check_postgres && PG_UP=true
-        check_redis && REDIS_UP=true
+        
+        if [ "$DB_BACKEND" != "sqlite" ]; then
+            check_postgres && PG_UP=true
+        fi
+        
+        if [ "$EVENT_BUS" == "redis" ]; then
+            check_redis && REDIS_UP=true
+        fi
+        
         if [ "$PG_UP" = true ] && [ "$REDIS_UP" = true ]; then
             break
         fi
@@ -53,7 +73,6 @@ if [ "$REDIS_UP" = false ]; then
     exit 1
 fi
 
-echo "PostgreSQL is up."
-echo "Redis is up."
+echo "Services are up."
 echo "Starting Kairo development server on http://localhost:8000..."
-uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload --proxy-headers --forwarded-allow-ips "*"
