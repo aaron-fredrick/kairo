@@ -13,25 +13,5 @@ export default defineConfig({
   build: {
     outDir: path.resolve(__dirname, '../app/static'),
     emptyOutDir: true, // Clean the app/static folder before building
-  },
-  server: {
-    proxy: {
-      '/api': {
-        target: 'http://127.0.0.1:8000',
-        changeOrigin: true
-      },
-      '/ws': {
-        target: 'http://127.0.0.1:8000',
-        ws: true
-      },
-      '/auth': {
-        target: 'http://127.0.0.1:8000',
-        changeOrigin: true
-      },
-      '/uploads': {
-        target: 'http://127.0.0.1:8000',
-        changeOrigin: true
-      }
-    }
   }
 })
