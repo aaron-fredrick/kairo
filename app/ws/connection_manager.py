@@ -11,6 +11,13 @@ class ConnectionManager:
         await websocket.accept()
         if room_id not in self.active_connections:
             self.active_connections[room_id] = []
+            
+            # Subscribe to the room's event channel only once
+            from app.core.event_bus import event_bus
+            async def room_handler(message: str) -> None:
+                await self.broadcast_to_local(message, room_id)
+            await event_bus.subscribe(f"room:{room_id}:events", room_handler)
+            
         self.active_connections[room_id].append(websocket)
 
     def disconnect(self, websocket: WebSocket, room_id: int) -> None:

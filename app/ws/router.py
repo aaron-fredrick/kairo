@@ -73,7 +73,9 @@ async def websocket_endpoint(
 
             await auth_service.refresh_user_activity(redis_client, username)
             event_data["sender"] = username
-            await manager.broadcast_to_local(json.dumps(event_data), room_id)
+            
+            from app.core.event_bus import event_bus
+            await event_bus.publish(f"room:{room_id}:events", json.dumps(event_data))
 
     except WebSocketDisconnect:
         manager.disconnect(websocket, room_id)

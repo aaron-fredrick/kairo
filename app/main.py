@@ -64,6 +64,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         pass
     logger.debug("Background workers stopped")
 
+    from app.core.event_bus import event_bus
+    await event_bus.close()
+    logger.debug("Event bus closed")
+
     await redis_manager.disconnect()
     logger.debug("Redis connection closed")
 

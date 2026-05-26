@@ -2,11 +2,10 @@
 Broadcast worker.
 
 A dedicated asyncio.Queue drains BroadcastJob items and fans the JSON event
-out to every WebSocket client in the target room via the local ConnectionManager.
+out to the abstract EventBus.
 
-When Redis pub/sub is active (USE_REDIS=True) the event is also published to
-  channel "room:{room_id}:events"
-so that peer server nodes (horizontal scale) can relay it to their own sockets.
+The EventBus handles delivering the message to the appropriate WebSocket clients,
+either locally (LocalEventBus) or across horizontal nodes (RedisEventBus).
 
 Event types:
   file_uploaded   — emitted immediately when a file is saved (thumbnails may not be ready)
@@ -48,32 +47,18 @@ broadcast_queue: asyncio.Queue[BroadcastJob] = asyncio.Queue()
 # ---------------------------------------------------------------------------
 
 async def _process_broadcast(job: BroadcastJob) -> None:
-    from app.db.redis import MockRedis, redis_manager
-    from app.ws.connection_manager import manager
+    from app.core.event_bus import event_bus
 
     envelope = json.dumps({
         "event": job.event_type,
         **job.payload,
     })
 
-    # Deliver to all locally-connected WebSocket clients in the room
-    await manager.broadcast_to_local(envelope, job.room_id)
-    logger.debug(
-        "Broadcast '%s' to room_id=%d (%d local connection(s))",
-        job.event_type,
-        job.room_id,
-        len(manager.active_connections.get(job.room_id, [])),
-    )
-
-    # Publish to Redis pub/sub for cross-node fan-out when Redis is available
-    redis = redis_manager.get_client()
-    if not isinstance(redis, MockRedis):
-        channel = f"room:{job.room_id}:events"
-        try:
-            await redis.publish(channel, envelope)
-            logger.debug("Published '%s' to Redis channel '%s'", job.event_type, channel)
-        except Exception as exc:
-            logger.warning("Redis publish failed for channel '%s': %s", channel, exc)
+    channel = f"room:{job.room_id}:events"
+    try:
+        await event_bus.publish(channel, envelope)
+    except Exception as exc:
+        logger.warning("EventBus publish failed for channel '%s': %s", channel, exc)
 
 
 async def run_broadcast_worker() -> None:
