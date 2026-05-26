@@ -29,6 +29,33 @@
     ];
     currentMessage = '';
   }
+
+  /* 
+  import { onMount } from 'svelte';
+  
+  onMount(async () => {
+    // 1. Fetching from the backend API using relative paths
+    // This goes through Caddy (port 80) or Vite Proxy (port 5173) cleanly to your backend
+    try {
+      const response = await fetch('/api/v1/rooms');
+      if (response.ok) {
+        const data = await response.json();
+        console.log("Rooms loaded from API:", data);
+      }
+    } catch (e) {
+      console.error("Failed to fetch rooms:", e);
+    }
+
+    // 2. Connecting to WebSocket relatively
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws/chat/${selectedRoomId}`;
+    const ws = new WebSocket(wsUrl);
+    
+    ws.onmessage = (event) => {
+      console.log("Realtime event received:", event.data);
+    };
+  });
+  */
 </script>
 
 <main class="app-layout">
@@ -92,18 +119,29 @@
               <span class="message-time">{message.time}</span>
             </div>
             <p class="message-text">{message.content}</p>
+            {#if message.id === 2}
+              <div class="message-attachment">
+                <!-- Placeholder for future thumbnail rendering -->
+                <div class="image-placeholder">
+                  <span class="icon">🖼️</span> architecture_diagram.png
+                </div>
+              </div>
+            {/if}
           </div>
         </div>
       {/each}
     </div>
 
     <form class="message-input-form" on:submit|preventDefault={sendMessage}>
+      <button type="button" class="attachment-btn" title="Upload File">
+        📎
+      </button>
       <input 
         type="text" 
         bind:value={currentMessage} 
         placeholder="Message #{rooms.find(r => r.id === selectedRoomId)?.name || 'general'}..." 
       />
-      <button type="submit" disabled={!currentMessage.trim()}>Send</button>
+      <button type="submit" class="send-btn" disabled={!currentMessage.trim()}>Send</button>
     </form>
   </section>
 </main>
@@ -417,7 +455,26 @@
     border-color: #6366f1;
   }
 
-  .message-input-form button {
+  .attachment-btn {
+    background: transparent;
+    border: 1px solid #1f2937;
+    color: #9ca3af;
+    border-radius: 8px;
+    padding: 0 1rem;
+    font-size: 1.1rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .attachment-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: #f3f4f6;
+  }
+
+  .message-input-form .send-btn {
     background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
     color: white;
     border: none;
@@ -430,13 +487,36 @@
     transition: opacity 0.2s ease;
   }
 
-  .message-input-form button:hover:not(:disabled) {
+  .message-input-form .send-btn:hover:not(:disabled) {
     opacity: 0.9;
   }
 
-  .message-input-form button:disabled {
+  .message-input-form .send-btn:disabled {
     background: #1f2937;
     color: #4b5563;
     cursor: not-allowed;
+  }
+
+  .message-attachment {
+    margin-top: 0.75rem;
+  }
+
+  .image-placeholder {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background-color: #111827;
+    border: 1px dashed #374151;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    color: #9ca3af;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .image-placeholder:hover {
+    border-color: #6366f1;
+    color: #e5e7eb;
   }
 </style>
