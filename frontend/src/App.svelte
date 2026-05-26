@@ -78,7 +78,7 @@
         <button 
           class="room-item" 
           class:active={room.id === selectedRoomId}
-          on:click={() => selectedRoomId = room.id}
+          onclick={() => selectedRoomId = room.id}
         >
           <span class="hash">#</span>
           <span class="room-name">{room.name}</span>
@@ -136,7 +136,7 @@
       {/each}
     </div>
 
-    <form class="message-input-form" on:submit|preventDefault={sendMessage}>
+    <form class="message-input-form" onsubmit={(e) => { e.preventDefault(); sendMessage(); }}>
       <button type="button" class="attachment-btn" title="Upload File">
         📎
       </button>
