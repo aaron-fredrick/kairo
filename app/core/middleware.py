@@ -1,4 +1,3 @@
-import logging
 from typing import Callable
 
 from fastapi import Request, Response, status
@@ -19,19 +18,19 @@ class IPAccessMiddleware(BaseHTTPMiddleware):
 
         if client_ip:
             if settings.blacklist_ips and client_ip in settings.blacklist_ips:
-                logger.warning("Blocked blacklisted IP: %s → %s", client_ip, request.url.path)
+                logger.warning("Blocked blacklisted IP: %s -> %s", client_ip, request.url.path)
                 return JSONResponse(
                     status_code=status.HTTP_403_FORBIDDEN,
                     content={"detail": "Access denied: IP is blacklisted."},
                 )
 
             if settings.whitelist_ips and client_ip not in settings.whitelist_ips:
-                logger.warning("Blocked non-whitelisted IP: %s → %s", client_ip, request.url.path)
+                logger.warning("Blocked non-whitelisted IP: %s -> %s", client_ip, request.url.path)
                 return JSONResponse(
                     status_code=status.HTTP_403_FORBIDDEN,
                     content={"detail": "Access denied: IP is not whitelisted."},
                 )
 
-            logger.debug("IP allowed: %s → %s", client_ip, request.url.path)
+            logger.debug("IP allowed: %s -> %s", client_ip, request.url.path)
 
         return await call_next(request)

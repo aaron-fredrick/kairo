@@ -134,7 +134,7 @@ class AuthService:
         expire_time = int(time.time()) + (settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
         await redis.zadd("active_users", {username: expire_time})
 
-        access_token = create_access_token(data={"sub": username})
+        access_token = create_access_token(data={"sub": username, "role": "normal"})
 
         logger.info("New session started for '%s' (expires at epoch %d)", username, expire_time)
         return username, access_token

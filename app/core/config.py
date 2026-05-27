@@ -14,6 +14,7 @@ class Settings(BaseSettings):
 
     # Auth and Access Control
     SERVER_PASSWORD: Optional[str] = os.getenv("SERVER_PASSWORD")
+    ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "admin")
     USER_LIMIT: Optional[int] = int(os.getenv("USER_LIMIT")) if os.getenv("USER_LIMIT") else None
     IP_BLACKLIST: str = os.getenv("IP_BLACKLIST", "")
     IP_WHITELIST: str = os.getenv("IP_WHITELIST", "")

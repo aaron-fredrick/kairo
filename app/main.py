@@ -12,8 +12,9 @@ from app.api.router import api_router
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.core.middleware import IPAccessMiddleware
-from app.db.database import engine
+from app.db.database import engine, AsyncSessionLocal
 from app.db.redis import redis_manager
+from app.services.admin_service import admin_service
 from app.storage.backends import storage_backend
 from app.workers.thumbnail import run_thumbnail_worker
 from app.workers.broadcast import run_broadcast_worker
@@ -45,6 +46,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         async with engine.begin() as conn:
             await conn.execute(text("SELECT 1"))
         logger.info("PostgreSQL connection pool ready")
+
+    async with AsyncSessionLocal() as seed_session:
+        await admin_service.seed_default_admin(seed_session)
+        await admin_service.seed_system_rooms(seed_session)
+    logger.info("Database seed complete")
 
     worker_task = asyncio.create_task(run_thumbnail_worker(storage_backend))
     logger.info("Thumbnail worker spawned")

@@ -2,10 +2,10 @@ import time
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
+import bcrypt as _bcrypt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from redis.asyncio import Redis
 
 from app.core.config import settings
@@ -16,17 +16,15 @@ logger = get_logger(__name__)
 
 security = HTTPBearer()
 
-_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Return True if plain_password matches the stored bcrypt hash."""
-    return _pwd_context.verify(plain_password, hashed_password)
+    return _bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
 
 
 def get_password_hash(password: str) -> str:
     """Generate and return a bcrypt hash for the given password."""
-    return _pwd_context.hash(password)
+    return _bcrypt.hashpw(password.encode("utf-8"), _bcrypt.gensalt()).decode("utf-8")
 
 
 def create_access_token(

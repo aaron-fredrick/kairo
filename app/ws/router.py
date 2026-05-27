@@ -1,18 +1,48 @@
 import json
 import time
+from typing import Optional
 
 import redis.asyncio as aioredis
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.jwt import decode_access_token
 from app.core.logging import get_logger
+from app.db.database import get_db
 from app.db.redis import get_redis
+from app.models.user import UserRole
 from app.services.auth_service import auth_service
+from app.services.admin_service import SYSTEM_ROOM_ADMIN, SYSTEM_ROOM_MODS
 from app.ws.connection_manager import manager
 
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/ws", tags=["websockets"])
+
+# Maps system room names to the minimum role required to access them.
+_SYSTEM_ROOM_ACCESS: dict[str, set[str]] = {
+    SYSTEM_ROOM_ADMIN: {UserRole.ADMIN.value},
+    SYSTEM_ROOM_MODS: {UserRole.ADMIN.value, UserRole.MODERATOR.value},
+}
+
+
+async def _resolve_room_name(room_id: int, db: AsyncSession) -> Optional[str]:
+    """Return the room name for the given id, or None if not found."""
+    from app.models.room import Room
+    result = await db.execute(select(Room).where(Room.id == room_id))
+    room = result.scalars().first()
+    return room.name if room else None
+
+
+def _is_room_access_denied(room_name: Optional[str], role: str) -> bool:
+    """Return True when the user's role is not permitted to enter the room."""
+    if room_name is None:
+        return False
+    required_roles = _SYSTEM_ROOM_ACCESS.get(room_name)
+    if required_roles is None:
+        return False
+    return role not in required_roles
 
 
 @router.websocket("/chat/{room_id}")
@@ -21,50 +51,65 @@ async def websocket_endpoint(
     room_id: int,
     token: str = Query(None),
     redis_client: aioredis.Redis = Depends(get_redis),
+    db: AsyncSession = Depends(get_db),
 ) -> None:
     """
     Authenticated WebSocket endpoint for real-time room chat.
 
     Authentication is performed via a token query parameter. The connection is
     rejected with close code 1008 (policy violation) if the token is absent,
-    invalid, or the session has expired in Redis.
+    invalid, the session has expired, or the user's role does not grant access
+    to the requested room (applies to the 'admins' and 'moderators' rooms).
+
+    A null room_id of 0 is the public channel — accessible to all roles.
     """
     client_host = websocket.client.host if websocket.client else "unknown"
 
     if not token:
-        logger.warning("WS connection rejected (no token): room_id=%d host=%s", room_id, client_host)
+        logger.warning("WS rejected (no token): room_id=%d host=%s", room_id, client_host)
         await websocket.close(code=1008)
         return
 
     payload = decode_access_token(token)
     if not payload or "sub" not in payload:
-        logger.warning("WS connection rejected (invalid token): room_id=%d host=%s", room_id, client_host)
+        logger.warning("WS rejected (invalid token): room_id=%d host=%s", room_id, client_host)
         await websocket.close(code=1008)
         return
 
     username: str = payload["sub"]
+    role: str = payload.get("role", UserRole.NORMAL.value)
 
     score = await redis_client.zscore("active_users", username)
     if score is None or score < time.time():
-        logger.info(
-            "WS connection rejected (session expired): user='%s' room_id=%d", username, room_id
-        )
+        logger.info("WS rejected (session expired): user='%s' room_id=%d", username, room_id)
         await websocket.close(code=1008)
         return
 
+    # Enforce system-room access control.
+    if room_id != 0:
+        room_name = await _resolve_room_name(room_id, db)
+        if _is_room_access_denied(room_name, role):
+            logger.warning(
+                "WS rejected (insufficient role): user='%s' role='%s' room='%s'",
+                username,
+                role,
+                room_name,
+            )
+            await websocket.close(code=1008)
+            return
+
     await manager.connect(websocket, room_id)
     await auth_service.refresh_user_activity(redis_client, username)
-    logger.info("WS connected: user='%s' room_id=%d host=%s", username, room_id, client_host)
+    logger.info("WS connected: user='%s' role='%s' room_id=%d host=%s", username, role, room_id, client_host)
 
     try:
         while True:
             data = await websocket.receive_text()
-            logger.debug("WS message received from '%s' in room_id=%d", username, room_id)
+            logger.debug("WS message from '%s' in room_id=%d", username, room_id)
 
             try:
                 event_data: dict = json.loads(data)
             except json.JSONDecodeError:
-                logger.debug("WS invalid JSON from '%s'", username)
                 await manager.send_personal_message(
                     json.dumps({"error": "Invalid JSON format"}),
                     websocket,
@@ -73,7 +118,8 @@ async def websocket_endpoint(
 
             await auth_service.refresh_user_activity(redis_client, username)
             event_data["sender"] = username
-            
+            event_data["role"] = role
+
             from app.core.event_bus import event_bus
             await event_bus.publish(f"room:{room_id}:events", json.dumps(event_data))
 
