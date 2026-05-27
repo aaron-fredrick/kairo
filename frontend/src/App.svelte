@@ -10,6 +10,9 @@
   let token = null;
   let ws = null;
   
+  let isLoadingRooms = true;
+  let isLoadingMessages = false;
+  
   $: allMessages = [...messages, ...tempMessages];
   
   let chatHistoryRef = null;
@@ -22,26 +25,57 @@
     }
   }
 
-  async function initialize() {
-    try {
-      // 1. Join server to get token and username
-      const joinRes = await fetch('/api/v1/auth/join', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({})
-      });
-      if (!joinRes.ok) throw new Error('Failed to join server');
-      const joinData = await joinRes.json();
-      token = joinData.access_token;
-      username = joinData.username;
+  function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return null;
+  }
 
-      // 2. Fetch rooms
-      const roomsRes = await fetch('/api/v1/rooms', {
+  function setCookie(name, value, days = 7) {
+    const d = new Date();
+    d.setTime(d.getTime() + (days * 24 * 60 * 60 * 1000));
+    document.cookie = `${name}=${value};expires=${d.toUTCString()};path=/`;
+  }
+
+  async function joinServer() {
+    const joinRes = await fetch('/api/v1/auth/join', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    if (!joinRes.ok) throw new Error('Failed to join server');
+    const joinData = await joinRes.json();
+    token = joinData.access_token;
+    username = joinData.username;
+    setCookie('kairo_token', token);
+    setCookie('kairo_username', username);
+  }
+
+  async function initialize() {
+    isLoadingRooms = true;
+    try {
+      token = getCookie('kairo_token');
+      username = getCookie('kairo_username') || 'Guest';
+
+      if (!token) {
+        await joinServer();
+      }
+
+      let roomsRes = await fetch('/api/v1/rooms', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
+
+      if (roomsRes.status === 401) {
+        setCookie('kairo_token', '', -1);
+        await joinServer();
+        roomsRes = await fetch('/api/v1/rooms', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+      }
+
       if (roomsRes.ok) {
         rooms = await roomsRes.json();
-        // Automatically select the 'public' room if it exists
         const publicRoom = rooms.find(r => r.name === 'public');
         if (publicRoom) {
           selectRoom(publicRoom.id);
@@ -51,10 +85,14 @@
       }
     } catch (e) {
       console.error(e);
+    } finally {
+      isLoadingRooms = false;
     }
   }
 
   async function loadRoomMessages(roomId) {
+    isLoadingMessages = true;
+    messages = [];
     try {
       const res = await fetch(`/api/v1/rooms/${roomId}/messages`, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -72,6 +110,8 @@
       }
     } catch (e) {
       console.error(e);
+    } finally {
+      isLoadingMessages = false;
     }
   }
 
@@ -167,16 +207,22 @@
     
     <div class="section-title">CHANNELS</div>
     <nav class="room-list">
-      {#each rooms as room}
-        <button 
-          class="room-item" 
-          class:active={room.id === selectedRoomId}
-          onclick={() => selectRoom(room.id)}
-        >
-          <span class="hash">#</span>
-          <span class="room-name">{room.name}</span>
-        </button>
-      {/each}
+      {#if isLoadingRooms}
+        <div class="skeleton-room skeleton"></div>
+        <div class="skeleton-room skeleton"></div>
+        <div class="skeleton-room skeleton"></div>
+      {:else}
+        {#each rooms as room}
+          <button 
+            class="room-item" 
+            class:active={room.id === selectedRoomId}
+            onclick={() => selectRoom(room.id)}
+          >
+            <span class="hash">#</span>
+            <span class="room-name">{room.name}</span>
+          </button>
+        {/each}
+      {/if}
     </nav>
 
     <div class="user-profile">
@@ -205,25 +251,43 @@
     </header>
 
     <div class="message-history" bind:this={chatHistoryRef}>
-      {#each allMessages as message}
-        <div class="message-card" class:self={message.sender === username}>
-          <div class="message-avatar">
-            {message.sender.slice(0, 2).toUpperCase()}
-          </div>
-          <div class="message-content-wrapper">
-            <div class="message-meta">
-              <span class="message-sender">{message.sender}</span>
-              <span class="message-time">{message.time}</span>
-              {#if message.loading}
-                 <span class="message-status">
-                    <span class="loading-icon">⏳</span> Delivering...
-                 </span>
-              {/if}
-            </div>
-            <p class="message-text" class:pending={message.loading}>{message.content}</p>
+      {#if isLoadingMessages}
+        <div class="skeleton-message">
+          <div class="skeleton-avatar skeleton"></div>
+          <div class="skeleton-content">
+             <div class="skeleton-meta skeleton"></div>
+             <div class="skeleton-text skeleton"></div>
+             <div class="skeleton-text short skeleton"></div>
           </div>
         </div>
-      {/each}
+        <div class="skeleton-message">
+          <div class="skeleton-avatar skeleton"></div>
+          <div class="skeleton-content">
+             <div class="skeleton-meta skeleton"></div>
+             <div class="skeleton-text skeleton"></div>
+          </div>
+        </div>
+      {:else}
+        {#each allMessages as message}
+          <div class="message-card" class:self={message.sender === username}>
+            <div class="message-avatar">
+              {message.sender.slice(0, 2).toUpperCase()}
+            </div>
+            <div class="message-content-wrapper">
+              <div class="message-meta">
+                <span class="message-sender">{message.sender}</span>
+                <span class="message-time">{message.time}</span>
+                {#if message.loading}
+                   <span class="message-status">
+                      <span class="loading-icon">⏳</span> Delivering...
+                   </span>
+                {/if}
+              </div>
+              <p class="message-text" class:pending={message.loading}>{message.content}</p>
+            </div>
+          </div>
+        {/each}
+      {/if}
     </div>
 
     <form class="message-input-form" onsubmit={(e) => { e.preventDefault(); sendMessage(); }}>
@@ -631,5 +695,59 @@
   }
   .message-text.pending {
     opacity: 0.6;
+  }
+  
+  @keyframes shimmer {
+    0% { background-position: -400px 0; }
+    100% { background-position: 400px 0; }
+  }
+
+  .skeleton {
+    background: #1f2937;
+    background-image: linear-gradient(90deg, #1f2937 0px, #374151 40px, #1f2937 80px);
+    background-size: 800px 100%;
+    animation: shimmer 2s infinite linear;
+  }
+
+  .skeleton-room {
+    height: 38px;
+    margin-bottom: 8px;
+    border-radius: 8px;
+  }
+
+  .skeleton-message {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .skeleton-avatar {
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+    flex-shrink: 0;
+  }
+
+  .skeleton-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .skeleton-meta {
+    height: 14px;
+    width: 120px;
+    border-radius: 4px;
+  }
+
+  .skeleton-text {
+    height: 16px;
+    width: 80%;
+    border-radius: 4px;
+  }
+  
+  .skeleton-text.short {
+    width: 50%;
   }
 </style>
