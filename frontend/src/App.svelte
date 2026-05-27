@@ -553,12 +553,7 @@
   }
 
   .message-card.self .message-text {
-    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-    color: white;
-    padding: 0.75rem 1rem;
-    border-radius: 1.5rem;
-    border-bottom-right-radius: 0.25rem;
-    display: inline-block;
+    text-align: right;
   }
 
   .message-meta.self-meta {
