@@ -270,19 +270,27 @@
       {:else}
         {#each allMessages as message}
           <div class="message-card" class:self={message.sender === username}>
-            <div class="message-avatar">
-              {message.sender.slice(0, 2).toUpperCase()}
-            </div>
-            <div class="message-content-wrapper">
-              <div class="message-meta">
-                <span class="message-sender">{message.sender}</span>
-                <span class="message-time">{message.time}</span>
-                {#if message.loading}
-                   <span class="message-status">
-                      <span class="loading-icon">⏳</span> Delivering...
-                   </span>
-                {/if}
+            {#if message.sender !== username}
+              <div class="message-avatar">
+                {message.sender.slice(0, 2).toUpperCase()}
               </div>
+            {/if}
+            <div class="message-content-wrapper">
+              {#if message.sender === username}
+                <div class="message-meta self-meta">
+                  <span class="message-time">{message.time}</span>
+                  {#if message.loading}
+                     <span class="message-status">
+                        <span class="loading-icon">⏳</span> Delivering...
+                     </span>
+                  {/if}
+                </div>
+              {:else}
+                <div class="message-meta">
+                  <span class="message-sender">{message.sender}</span>
+                  <span class="message-time">{message.time}</span>
+                </div>
+              {/if}
               <p class="message-text" class:pending={message.loading}>{message.content}</p>
             </div>
           </div>
@@ -537,7 +545,24 @@
   }
 
   .message-card.self {
-    align-self: flex-start;
+    align-self: flex-end;
+  }
+
+  .message-card.self .message-content-wrapper {
+    align-items: flex-end;
+  }
+
+  .message-card.self .message-text {
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    color: white;
+    padding: 0.75rem 1rem;
+    border-radius: 1.5rem;
+    border-bottom-right-radius: 0.25rem;
+    display: inline-block;
+  }
+
+  .message-meta.self-meta {
+    justify-content: flex-end;
   }
 
   .message-avatar {
@@ -552,11 +577,6 @@
     font-size: 0.85rem;
     color: #9ca3af;
     flex-shrink: 0;
-  }
-
-  .message-card.self .message-avatar {
-    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-    color: white;
   }
 
   .message-content-wrapper {
