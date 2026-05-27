@@ -302,11 +302,17 @@
       <button type="button" class="attachment-btn" title="Upload File">
         📎
       </button>
-      <input 
-        type="text" 
+      <textarea 
         bind:value={currentMessage} 
         placeholder="Message #{rooms.find(r => r.id === selectedRoomId)?.name || '...'}..." 
-      />
+        rows="1"
+        onkeydown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+          }
+        }}
+      ></textarea>
       <button type="submit" class="send-btn" disabled={!currentMessage.trim()}>Send</button>
     </form>
   </section>
@@ -602,6 +608,7 @@
     font-size: 0.95rem;
     color: #d1d5db;
     line-height: 1.5;
+    white-space: pre-wrap;
   }
 
   /* Form */
@@ -612,7 +619,7 @@
     border-top: 1px solid #1f2937;
   }
 
-  .message-input-form input {
+  .message-input-form textarea {
     flex: 1;
     background-color: #111827;
     border: 1px solid #1f2937;
@@ -620,11 +627,15 @@
     padding: 0.85rem 1rem;
     color: #f3f4f6;
     font-size: 0.95rem;
+    font-family: inherit;
     outline: none;
     transition: border-color 0.2s ease;
+    resize: none;
+    max-height: 120px;
+    overflow-y: auto;
   }
 
-  .message-input-form input:focus {
+  .message-input-form textarea:focus {
     border-color: #6366f1;
   }
 
