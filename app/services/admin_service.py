@@ -118,6 +118,7 @@ class AdminService:
             username="admin",
             hashed_password=get_password_hash(settings.ADMIN_PASSWORD),
             is_anonymous=False,
+            is_superadmin=True,
             role=UserRole.ADMIN.value,
         )
         db.add(admin)

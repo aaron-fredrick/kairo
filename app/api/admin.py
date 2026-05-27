@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -50,7 +50,14 @@ async def create_privileged_user(
       never shown again.
 
     Only existing admins may call this endpoint.
+    Sub-admins can only create moderators. Only the main superadmin can create admins.
     """
+    if request.role == UserRole.ADMIN and not _.is_superadmin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the superadmin can create other admins.",
+        )
+
     was_random = request.password is None
     user, plain_password = await admin_service.create_named_user(
         db=db,

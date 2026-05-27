@@ -36,6 +36,7 @@ class TokenResponse(BaseModel):
 async def join_server(
     request: ServerJoinRequest,
     redis: Redis = Depends(get_redis),
+    db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
     """
     Assign the caller an adjective-noun username and return a signed JWT.
@@ -43,7 +44,7 @@ async def join_server(
     Optionally validates a server password when the server is password-protected.
     """
     logger.debug("Join request received (password_provided=%s)", request.password is not None)
-    username, access_token = await auth_service.join_server(redis, request.password)
+    username, access_token = await auth_service.join_server(redis, db, request.password)
     logger.info("Anonymous client joined as '%s'", username)
     return TokenResponse(access_token=access_token, username=username, role="normal")
 

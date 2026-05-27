@@ -115,11 +115,11 @@ class AuthService:
         )
 
     async def join_server(
-        self, redis: Redis, password: Optional[str] = None
+        self, redis: Redis, db: AsyncSession, password: Optional[str] = None
     ) -> Tuple[str, str]:
         """
         Validate the server password (if set), allocate a username, register it in
-        Redis, and return a (username, access_token) pair.
+        Redis, insert it into the database, and return a (username, access_token) pair.
         """
         if settings.SERVER_PASSWORD:
             if not password or password != settings.SERVER_PASSWORD:
@@ -130,13 +130,34 @@ class AuthService:
                 )
 
         username = await self.generate_unique_username(redis)
+        
+        # Insert anonymous user into the database so they have an ID for messages
+        from sqlalchemy.exc import IntegrityError
+        from app.models.user import User, UserRole
+        
+        user = User(
+            username=username,
+            is_anonymous=True,
+            is_superadmin=False,
+            role=UserRole.NORMAL.value
+        )
+        db.add(user)
+        try:
+            await db.commit()
+            await db.refresh(user)
+        except IntegrityError:
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Could not generate a unique username, please try again."
+            )
 
         expire_time = int(time.time()) + (settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
         await redis.zadd("active_users", {username: expire_time})
 
         access_token = create_access_token(data={"sub": username, "role": "normal"})
 
-        logger.info("New session started for '%s' (expires at epoch %d)", username, expire_time)
+        logger.info("New anonymous session started for '%s' (expires at epoch %d)", username, expire_time)
         return username, access_token
 
     async def refresh_user_activity(self, redis: Redis, username: str) -> None:

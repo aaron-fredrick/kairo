@@ -7,8 +7,12 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.jwt import get_current_username
+from app.auth.dependencies import get_current_user, require_admin_or_moderator
 from app.core.logging import get_logger
 from app.db.database import get_db
+from app.models.room import Room
+from app.models.message import Message
+from app.models.user import User
 
 logger = get_logger(__name__)
 
@@ -46,17 +50,24 @@ class MessageResponse(BaseModel):
 async def create_room(
     room_data: RoomCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: str = Depends(get_current_username),
+    current_user: User = Depends(require_admin_or_moderator),
 ) -> RoomResponse:
-    """Create a new chat room/channel."""
-    logger.debug("Room creation requested by '%s': name='%s'", current_user, room_data.name)
-    # TODO: Implement database insertion
-    return RoomResponse(
-        id=1,
-        name=room_data.name,
-        description=room_data.description,
-        created_at=datetime.utcnow(),
-    )
+    """Create a new chat room/channel. Restricted to admins and moderators."""
+    logger.debug("Room creation requested by '%s': name='%s'", current_user.username, room_data.name)
+    from sqlalchemy import select
+    from fastapi import HTTPException
+    
+    # Check if room name already exists
+    result = await db.execute(select(Room).where(Room.name == room_data.name))
+    if result.scalars().first():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Room name already exists")
+    
+    room = Room(name=room_data.name, description=room_data.description)
+    db.add(room)
+    await db.commit()
+    await db.refresh(room)
+    
+    return RoomResponse.model_validate(room)
 
 
 @router.get("/", response_model=List[RoomResponse])
@@ -66,8 +77,10 @@ async def list_rooms(
 ) -> List[RoomResponse]:
     """Return all available rooms."""
     logger.debug("Room list requested by '%s'", current_user)
-    # TODO: Implement list retrieval
-    return []
+    from sqlalchemy import select
+    result = await db.execute(select(Room))
+    rooms = result.scalars().all()
+    return [RoomResponse.model_validate(r) for r in rooms]
 
 
 @router.get("/{room_id}/messages", response_model=List[MessageResponse])
@@ -84,5 +97,25 @@ async def get_room_messages(
         room_id,
         limit,
     )
-    # TODO: Implement historical message query
-    return []
+    from sqlalchemy import select
+    from sqlalchemy.orm import joinedload
+    
+    result = await db.execute(
+        select(Message)
+        .options(joinedload(Message.sender))
+        .where(Message.room_id == room_id)
+        .order_by(Message.created_at.desc())
+        .limit(limit)
+    )
+    messages = result.scalars().all()
+    
+    return [
+        MessageResponse(
+            id=m.id,
+            content=m.content,
+            sender_id=m.sender_id,
+            sender_username=m.sender.username,
+            room_id=m.room_id,
+            created_at=m.created_at
+        ) for m in reversed(messages)
+    ]

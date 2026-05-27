@@ -23,6 +23,7 @@ class User(Base, TimestampMixin):
     username: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(128), nullable=True)
     is_anonymous: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_superadmin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     role: Mapped[str] = mapped_column(
         SAEnum(UserRole, values_callable=lambda e: [m.value for m in e]),
         default=UserRole.NORMAL.value,
