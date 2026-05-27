@@ -63,19 +63,13 @@ def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-async def get_current_username(
+async def get_current_user_payload(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     redis: Redis = Depends(get_redis),
-) -> str:
+) -> Dict[str, Any]:
     """
-    FastAPI dependency that extracts and validates a Bearer token.
-
-    Validates the JWT signature, checks that the subject is still registered
-    in Redis as an active session, and slides the session expiry window forward.
-
-    Raises HTTP 401 on any validation failure.
+    FastAPI dependency that extracts and validates a Bearer token, returning the full payload.
     """
-    # Lazy import avoids the circular dependency between jwt ↔ auth_service
     from app.services.auth_service import auth_service  # noqa: PLC0415
 
     token = credentials.credentials
@@ -109,4 +103,13 @@ async def get_current_username(
 
     logger.debug("Authenticated request for user '%s'", username)
     await auth_service.refresh_user_activity(redis, username)
-    return username
+    return payload
+
+
+async def get_current_username(
+    payload: Dict[str, Any] = Depends(get_current_user_payload),
+) -> str:
+    """
+    FastAPI dependency that returns the username of the authenticated user.
+    """
+    return payload["sub"]

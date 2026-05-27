@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.jwt import get_current_username
+from app.auth.jwt import get_current_username, get_current_user_payload
 from app.auth.dependencies import get_current_user, require_admin_or_moderator
 from app.core.logging import get_logger
 from app.db.database import get_db
@@ -73,14 +73,29 @@ async def create_room(
 @router.get("", response_model=List[RoomResponse])
 async def list_rooms(
     db: AsyncSession = Depends(get_db),
-    current_user: str = Depends(get_current_username),
+    token_payload: dict = Depends(get_current_user_payload),
 ) -> List[RoomResponse]:
-    """Return all available rooms."""
-    logger.debug("Room list requested by '%s'", current_user)
+    """Return all available rooms, filtering system rooms based on JWT role."""
+    from app.services.admin_service import SYSTEM_ROOM_ADMIN, SYSTEM_ROOM_MODS
+    from app.models.user import UserRole
+    
+    username = token_payload["sub"]
+    role = token_payload.get("role", UserRole.NORMAL.value)
+    logger.debug("Room list requested by '%s' with role '%s'", username, role)
+    
     from sqlalchemy import select
     result = await db.execute(select(Room))
     rooms = result.scalars().all()
-    return [RoomResponse.model_validate(r) for r in rooms]
+    
+    filtered_rooms = []
+    for r in rooms:
+        if r.name == SYSTEM_ROOM_ADMIN and role != UserRole.ADMIN.value:
+            continue
+        if r.name == SYSTEM_ROOM_MODS and role not in (UserRole.ADMIN.value, UserRole.MODERATOR.value):
+            continue
+        filtered_rooms.append(r)
+        
+    return [RoomResponse.model_validate(r) for r in filtered_rooms]
 
 
 @router.get("/{room_id}/messages", response_model=List[MessageResponse])
@@ -88,12 +103,12 @@ async def get_room_messages(
     room_id: int,
     limit: int = 50,
     db: AsyncSession = Depends(get_db),
-    current_user: str = Depends(get_current_username),
+    current_username: str = Depends(get_current_username),
 ) -> List[MessageResponse]:
     """Return the message history for a specific room."""
     logger.debug(
         "Message history requested by '%s' for room_id=%d (limit=%d)",
-        current_user,
+        current_username,
         room_id,
         limit,
     )
@@ -119,3 +134,5 @@ async def get_room_messages(
             created_at=m.created_at
         ) for m in reversed(messages)
     ]
+
+
