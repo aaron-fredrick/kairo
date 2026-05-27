@@ -46,7 +46,7 @@ class MessageResponse(BaseModel):
         from_attributes = True
 
 
-@router.post("/", response_model=RoomResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=RoomResponse, status_code=status.HTTP_201_CREATED)
 async def create_room(
     room_data: RoomCreate,
     db: AsyncSession = Depends(get_db),
@@ -70,7 +70,7 @@ async def create_room(
     return RoomResponse.model_validate(room)
 
 
-@router.get("/", response_model=List[RoomResponse])
+@router.get("", response_model=List[RoomResponse])
 async def list_rooms(
     db: AsyncSession = Depends(get_db),
     current_user: str = Depends(get_current_username),
