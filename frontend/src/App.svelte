@@ -1,65 +1,158 @@
 <script>
-  let rooms = [
-    { id: 1, name: 'public', description: 'Public discussion channel' },
-    { id: 2, name: 'random', description: 'Random thoughts & links' },
-    { id: 3, name: 'tech', description: 'Technology and coding talk' },
-    { id: 4, name: 'announcements', description: 'Important updates' }
-  ];
+  import { onMount, onDestroy } from 'svelte';
 
-  let selectedRoomId = 1;
-  let messages = [
-    { id: 1, sender: 'swift-otter-245', content: 'Welcome to Kairo! This is a real-time messaging application.', time: '10:24 AM' },
-    { id: 2, sender: 'calm-badger-892', content: 'Does it support horizontal scaling?', time: '10:25 AM' },
-    { id: 3, sender: 'swift-otter-245', content: 'Yes, it uses Redis Pub/Sub to coordinate messages across multiple stateless FastAPI nodes!', time: '10:26 AM' }
-  ];
-
+  let rooms = [];
+  let selectedRoomId = null;
+  let messages = [];
+  let tempMessages = [];
   let currentMessage = '';
-  let username = 'anonymous-fox-123';
+  let username = 'Guest';
+  let token = null;
+  let ws = null;
+  
+  $: allMessages = [...messages, ...tempMessages];
+  
+  let chatHistoryRef = null;
+
+  function scrollToBottom() {
+    if (chatHistoryRef) {
+      setTimeout(() => {
+        chatHistoryRef.scrollTop = chatHistoryRef.scrollHeight;
+      }, 50);
+    }
+  }
+
+  async function initialize() {
+    try {
+      // 1. Join server to get token and username
+      const joinRes = await fetch('/api/v1/auth/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      if (!joinRes.ok) throw new Error('Failed to join server');
+      const joinData = await joinRes.json();
+      token = joinData.access_token;
+      username = joinData.username;
+
+      // 2. Fetch rooms
+      const roomsRes = await fetch('/api/v1/rooms', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (roomsRes.ok) {
+        rooms = await roomsRes.json();
+        // Automatically select the 'public' room if it exists
+        const publicRoom = rooms.find(r => r.name === 'public');
+        if (publicRoom) {
+          selectRoom(publicRoom.id);
+        } else if (rooms.length > 0) {
+          selectRoom(rooms[0].id);
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  async function loadRoomMessages(roomId) {
+    try {
+      const res = await fetch(`/api/v1/rooms/${roomId}/messages`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        messages = data.map(m => ({
+          id: m.id,
+          sender: m.sender_username,
+          content: m.content,
+          time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          loading: false
+        }));
+        scrollToBottom();
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  function connectWebSocket(roomId) {
+    if (ws) ws.close();
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws/chat/${roomId}?token=${token}`;
+    ws = new WebSocket(wsUrl);
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.event === "new_message") {
+          // Remove temp message if it matches our nonce or fallback
+          if (data.nonce) {
+             tempMessages = tempMessages.filter(m => m.nonce !== data.nonce);
+          } else {
+             const index = tempMessages.findIndex(m => m.sender === data.sender && m.content === data.content);
+             if (index !== -1) {
+                 tempMessages.splice(index, 1);
+                 tempMessages = [...tempMessages];
+             }
+          }
+
+          // Ensure no duplicate messages
+          if (!messages.find(m => m.id === data.id)) {
+            messages = [...messages, {
+              id: data.id,
+              sender: data.sender,
+              content: data.content,
+              time: new Date(data.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              loading: false
+            }];
+            scrollToBottom();
+          }
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    };
+  }
+
+  function selectRoom(roomId) {
+    selectedRoomId = roomId;
+    messages = [];
+    tempMessages = [];
+    loadRoomMessages(roomId);
+    connectWebSocket(roomId);
+  }
 
   function sendMessage() {
-    if (!currentMessage.trim()) return;
-    messages = [
-      ...messages,
-      {
-        id: messages.length + 1,
-        sender: username,
-        content: currentMessage,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      }
-    ];
+    if (!currentMessage.trim() || !ws) return;
+    
+    const nonce = Date.now().toString() + Math.random().toString();
+    
+    // Add temp message to UI
+    tempMessages = [...tempMessages, {
+      id: nonce,
+      nonce: nonce,
+      sender: username,
+      content: currentMessage,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      loading: true
+    }];
+    scrollToBottom();
+
+    ws.send(JSON.stringify({
+      content: currentMessage,
+      nonce: nonce
+    }));
+    
     currentMessage = '';
   }
 
-  /* 
-  import { onMount } from 'svelte';
-  
-  onMount(async () => {
-    // 1. Fetching from the backend API using relative paths
-    // The ngrok-skip-browser-warning header ensures ngrok's anti-abuse screen doesn't block API calls
-    try {
-      const response = await fetch('/api/v1/rooms', {
-        headers: {
-          'ngrok-skip-browser-warning': 'true'
-        }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        console.log("Rooms loaded from API:", data);
-      }
-    } catch (e) {
-      console.error("Failed to fetch rooms:", e);
-    }
-
-    // 2. Connecting to WebSocket relatively
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/chat/${selectedRoomId}`;
-    const ws = new WebSocket(wsUrl);
-    
-    ws.onmessage = (event) => {
-      console.log("Realtime event received:", event.data);
-    };
+  onMount(() => {
+    initialize();
   });
-  */
+  
+  onDestroy(() => {
+    if (ws) ws.close();
+  });
 </script>
 
 <main class="app-layout">
@@ -78,7 +171,7 @@
         <button 
           class="room-item" 
           class:active={room.id === selectedRoomId}
-          onclick={() => selectedRoomId = room.id}
+          onclick={() => selectRoom(room.id)}
         >
           <span class="hash">#</span>
           <span class="room-name">{room.name}</span>
@@ -102,7 +195,7 @@
   <section class="chat-container">
     <header class="chat-header">
       <div class="room-title">
-        <h2>#{rooms.find(r => r.id === selectedRoomId)?.name || 'public'}</h2>
+        <h2>#{rooms.find(r => r.id === selectedRoomId)?.name || '...'}</h2>
         <p class="room-description">{rooms.find(r => r.id === selectedRoomId)?.description || ''}</p>
       </div>
       <div class="connection-status">
@@ -111,8 +204,8 @@
       </div>
     </header>
 
-    <div class="message-history">
-      {#each messages as message}
+    <div class="message-history" bind:this={chatHistoryRef}>
+      {#each allMessages as message}
         <div class="message-card" class:self={message.sender === username}>
           <div class="message-avatar">
             {message.sender.slice(0, 2).toUpperCase()}
@@ -121,16 +214,13 @@
             <div class="message-meta">
               <span class="message-sender">{message.sender}</span>
               <span class="message-time">{message.time}</span>
+              {#if message.loading}
+                 <span class="message-status">
+                    <span class="loading-icon">⏳</span> Delivering...
+                 </span>
+              {/if}
             </div>
-            <p class="message-text">{message.content}</p>
-            {#if message.id === 2}
-              <div class="message-attachment">
-                <!-- Placeholder for future thumbnail rendering -->
-                <div class="image-placeholder">
-                  <span class="icon">🖼️</span> architecture_diagram.png
-                </div>
-              </div>
-            {/if}
+            <p class="message-text" class:pending={message.loading}>{message.content}</p>
           </div>
         </div>
       {/each}
@@ -143,7 +233,7 @@
       <input 
         type="text" 
         bind:value={currentMessage} 
-        placeholder="Message #{rooms.find(r => r.id === selectedRoomId)?.name || 'public'}..." 
+        placeholder="Message #{rooms.find(r => r.id === selectedRoomId)?.name || '...'}..." 
       />
       <button type="submit" class="send-btn" disabled={!currentMessage.trim()}>Send</button>
     </form>
@@ -522,5 +612,24 @@
   .image-placeholder:hover {
     border-color: #6366f1;
     color: #e5e7eb;
+  }
+
+  .message-status {
+    font-size: 0.75rem;
+    color: #f59e0b;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-weight: 500;
+  }
+  .loading-icon {
+    font-size: 0.8rem;
+    animation: spin 2s linear infinite;
+  }
+  @keyframes spin {
+    100% { transform: rotate(360deg); }
+  }
+  .message-text.pending {
+    opacity: 0.6;
   }
 </style>

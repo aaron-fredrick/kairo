@@ -9,9 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.jwt import decode_access_token
 from app.core.logging import get_logger
-from app.db.database import get_db
+from app.db.database import get_db, AsyncSessionLocal
 from app.db.redis import get_redis
-from app.models.user import UserRole
+from app.models.user import User, UserRole
+from app.models.message import Message
 from app.services.auth_service import auth_service
 from app.services.admin_service import SYSTEM_ROOM_ADMIN, SYSTEM_ROOM_MODS
 from app.ws.connection_manager import manager
@@ -83,6 +84,14 @@ async def websocket_endpoint(
         await websocket.close(code=1008)
         return
 
+    result = await db.execute(select(User).where(User.username == username))
+    user = result.scalars().first()
+    if not user:
+        logger.warning("WS rejected (user not found in DB): username='%s'", username)
+        await websocket.close(code=1008)
+        return
+    sender_id = user.id
+
     # Enforce system-room access control.
     room_name = await _resolve_room_name(room_id, db)
     if room_name is None:
@@ -119,6 +128,24 @@ async def websocket_endpoint(
                 continue
 
             await auth_service.refresh_user_activity(redis_client, username)
+            
+            content = event_data.get("content")
+            if content:
+                async with AsyncSessionLocal() as session:
+                    message = Message(sender_id=sender_id, room_id=room_id, content=content)
+                    session.add(message)
+                    await session.commit()
+                    await session.refresh(message)
+                    
+                    event_data["id"] = message.id
+                    if message.created_at:
+                        event_data["created_at"] = message.created_at.isoformat()
+                    else:
+                        from datetime import datetime
+                        event_data["created_at"] = datetime.utcnow().isoformat()
+                        
+                event_data["event"] = "new_message"
+
             event_data["sender"] = username
             event_data["role"] = role
 
