@@ -130,14 +130,44 @@ async def websocket_endpoint(
             await auth_service.refresh_user_activity(redis_client, username)
             
             content = event_data.get("content")
-            blob_hash: str | None = event_data.get("blob_hash")
+            blob_hashes: list[str] | None = event_data.get("blob_hashes")
 
-            if content or blob_hash:
+            if content or blob_hashes:
                 async with AsyncSessionLocal() as session:
+                    # Resolve attachment metadata first to embed it in the DB record
+                    attachments_data = []
+                    if blob_hashes:
+                        from sqlalchemy import select as _select
+                        from app.models.upload import Upload
+                        from app.core.config import settings
+                        from app.services.thumbnail_service import THUMBNAIL_SIZES
+
+                        result = await session.execute(_select(Upload).where(Upload.hash_id.in_(blob_hashes)))
+                        uploads = result.scalars().all()
+                        upload_map = {u.hash_id: u for u in uploads}
+
+                        base = settings.UPLOAD_BASE_URL.rstrip("/")
+                        for h in blob_hashes:
+                            if h in upload_map:
+                                u = upload_map[h]
+                                attachments_data.append({
+                                    "blob_hash": h,
+                                    "filename": u.original_filename,
+                                    "mime_type": u.mime_type,
+                                    "size_bytes": u.size_bytes,
+                                    "file_url": f"{base}/files/{h}",
+                                    "thumbnails": {
+                                        label: f"{base}/thumbnails/{h}_{w}x{h_sz}.jpeg"
+                                        for label, (w, h_sz) in THUMBNAIL_SIZES.items()
+                                    },
+                                    "thumbnails_ready": u.thumbnails_ready,
+                                })
+
                     message = Message(
                         sender_id=sender_id,
                         room_id=room_id,
                         content=content or "",
+                        attachments=attachments_data if attachments_data else None,
                     )
                     session.add(message)
                     await session.commit()
@@ -150,29 +180,8 @@ async def websocket_endpoint(
                         from datetime import datetime
                         event_data["created_at"] = datetime.utcnow().isoformat()
 
-                    # Attach file metadata so all clients render the attachment card.
-                    if blob_hash:
-                        from sqlalchemy import select as _select
-                        from app.models.upload import Upload
-                        from app.core.config import settings
-                        from app.services.thumbnail_service import THUMBNAIL_SIZES
-
-                        result = await session.execute(_select(Upload).where(Upload.hash_id == blob_hash))
-                        upload = result.scalars().first()
-                        if upload:
-                            base = settings.UPLOAD_BASE_URL.rstrip("/")
-                            event_data["attachment"] = {
-                                "blob_hash": blob_hash,
-                                "filename": upload.original_filename,
-                                "mime_type": upload.mime_type,
-                                "size_bytes": upload.size_bytes,
-                                "file_url": f"{base}/files/{blob_hash}",
-                                "thumbnails": {
-                                    label: f"{base}/thumbnails/{blob_hash}_{w}x{h}.jpeg"
-                                    for label, (w, h) in THUMBNAIL_SIZES.items()
-                                },
-                                "thumbnails_ready": upload.thumbnails_ready,
-                            }
+                    if attachments_data:
+                        event_data["attachments"] = attachments_data
 
                 event_data["event"] = "new_message"
 

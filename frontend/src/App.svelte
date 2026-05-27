@@ -86,7 +86,7 @@
         content: m.content,
         time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         loading: false,
-        attachment: m.attachment ?? null,
+        attachments: m.attachments ?? [],
       }));
       chatPanelRef?.scrollToBottom();
     } catch (e) {
@@ -114,11 +114,6 @@
         return;
       }
 
-      if (data.event === 'file_uploaded') {
-        handleFileUploaded(data);
-        return;
-      }
-
       if (data.event === 'thumbnails_ready') {
         handleThumbnailsReady(data);
         return;
@@ -143,43 +138,8 @@
         content: data.content,
         time: new Date(data.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         loading: false,
-        attachment: data.attachment ?? null,
+        attachments: data.attachments ?? [],
       }];
-      chatPanelRef?.scrollToBottom();
-    }
-  }
-
-  /**
-   * A file was uploaded. If it arrived via the pre-upload REST flow the
-   * client already has the blob reference embedded in the message; this WS
-   * event is the authoritative confirmation for OTHER connected clients who
-   * didn't upload the file themselves. We create a transient notification
-   * card so everyone in the room knows a file is pending attachment.
-   */
-  function handleFileUploaded(data) {
-    // Only inject a card if we don't already know about this blob hash (i.e.
-    // it came from a different connected client in this room).
-    const alreadyPresent = messages.some(m => m.attachment?.blob_hash === data.blob_hash)
-      || tempMessages.some(m => m.attachment?.blob_hash === data.blob_hash);
-
-    if (!alreadyPresent) {
-      const notice = {
-        id: `upload-${data.blob_hash}`,
-        sender: data.sender || '—',
-        content: '',
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        loading: false,
-        attachment: {
-          blob_hash: data.blob_hash,
-          filename: data.filename,
-          mime_type: data.mime_type,
-          size_bytes: data.size_bytes,
-          file_url: data.file_url,
-          thumbnails: data.thumbnails,
-          thumbnails_ready: data.thumbnails_ready,
-        },
-      };
-      messages = [...messages, notice];
       chatPanelRef?.scrollToBottom();
     }
   }
@@ -192,15 +152,12 @@
   function handleThumbnailsReady(data) {
     const patch = (list) =>
       list.map(m => {
-        if (m.attachment?.blob_hash !== data.hash_id) return m;
-        return {
-          ...m,
-          attachment: {
-            ...m.attachment,
-            thumbnails: data.thumbnails,
-            thumbnails_ready: true,
-          },
-        };
+        if (!m.attachments || m.attachments.length === 0) return m;
+        const newAttachments = m.attachments.map(att => {
+            if (att.blob_hash !== data.hash_id) return att;
+            return { ...att, thumbnails: data.thumbnails, thumbnails_ready: true };
+        });
+        return { ...m, attachments: newAttachments };
       });
 
     messages = patch(messages);
@@ -210,8 +167,8 @@
   // ── Sending ─────────────────────────────────────────────────────────────────
 
   function sendMessage({ detail } = {}) {
-    const attachment = detail?.attachment ?? null;
-    if (!currentMessage.trim() && !attachment) return;
+    const attachments = detail?.attachments ?? [];
+    if (!currentMessage.trim() && attachments.length === 0) return;
     if (!ws) return;
 
     const nonce = `${Date.now()}-${Math.random()}`;
@@ -223,14 +180,14 @@
       content: currentMessage,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       loading: true,
-      attachment,
+      attachments,
     }];
     chatPanelRef?.scrollToBottom();
 
     ws.send(JSON.stringify({
       content: currentMessage,
       nonce,
-      blob_hash: attachment?.blob_hash ?? null,
+      blob_hashes: attachments.map(a => a.blob_hash),
     }));
 
     currentMessage = '';

@@ -1,4 +1,4 @@
-from sqlalchemy import Text, ForeignKey
+from sqlalchemy import Text, ForeignKey, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from typing import TYPE_CHECKING, Optional
 from app.db.database import Base
@@ -16,6 +16,7 @@ class Message(Base, TimestampMixin):
     
     sender_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     room_id: Mapped[int] = mapped_column(ForeignKey("rooms.id", ondelete="CASCADE"), nullable=False)
+    attachments: Mapped[list[dict]] = mapped_column(JSON, nullable=True)
 
     # Relationships
     sender: Mapped["User"] = relationship(back_populates="messages")

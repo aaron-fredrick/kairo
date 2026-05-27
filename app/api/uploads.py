@@ -41,7 +41,6 @@ from app.db.database import get_db
 from app.models.upload import Upload
 from app.services.thumbnail_service import THUMBNAIL_SIZES
 from app.storage.blob_manager import blob_manager
-from app.workers.broadcast import BroadcastJob, broadcast_queue
 from app.workers.thumbnail import ThumbnailJob, thumbnail_queue
 
 logger = get_logger(__name__)
@@ -192,24 +191,6 @@ async def upload_file(
             mime_type=mime_type,
             extension=extension,
             room_id=room_id,
-        )
-    )
-
-    # Immediately broadcast file_uploaded so clients render a placeholder.
-    await broadcast_queue.put(
-        BroadcastJob(
-            room_id=room_id,
-            event_type="file_uploaded",
-            payload={
-                "blob_hash": blob.blob_hash,
-                "filename": original_filename,
-                "extension": extension,
-                "mime_type": mime_type,
-                "size_bytes": blob.size_bytes,
-                "file_url": _file_url(blob.blob_hash),
-                "thumbnails": _thumbnail_urls(blob.blob_hash).model_dump(),
-                "thumbnails_ready": False,
-            },
         )
     )
 

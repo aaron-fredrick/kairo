@@ -41,6 +41,7 @@ class MessageResponse(BaseModel):
     sender_username: str
     room_id: int
     created_at: datetime
+    attachments: Optional[List[dict]] = None
 
     class Config:
         from_attributes = True
@@ -131,7 +132,8 @@ async def get_room_messages(
             sender_id=m.sender_id,
             sender_username=m.sender.username,
             room_id=m.room_id,
-            created_at=m.created_at
+            created_at=m.created_at,
+            attachments=m.attachments
         ) for m in reversed(messages)
     ]
 
