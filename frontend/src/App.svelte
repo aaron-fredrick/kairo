@@ -323,8 +323,8 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
-    background-color: #0b0f19;
-    color: #f3f4f6;
+    background-color: #1e1e1e;
+    color: #cccccc;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
   }
 
@@ -338,8 +338,8 @@
   /* Sidebar styling */
   .sidebar {
     width: 260px;
-    background-color: #111827;
-    border-right: 1px solid #1f2937;
+    background-color: #252526;
+    border-right: 1px solid #333333;
     display: flex;
     flex-direction: column;
     flex-shrink: 0;
@@ -347,7 +347,7 @@
 
   .sidebar-header {
     padding: 1.5rem;
-    border-bottom: 1px solid #1f2937;
+    border-bottom: 1px solid #333333;
   }
 
   .logo {
@@ -358,14 +358,14 @@
 
   .logo-icon {
     font-size: 1.5rem;
-    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    background: #007acc;
     width: 36px;
     height: 36px;
     display: flex;
     align-items: center;
     justify-content: center;
     border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    color: #ffffff;
   }
 
   .logo h1 {
@@ -373,9 +373,7 @@
     font-weight: 800;
     letter-spacing: 0.05em;
     margin: 0;
-    background: linear-gradient(to right, #ffffff, #9ca3af);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: #cccccc;
   }
 
   .section-title {
@@ -413,29 +411,29 @@
   }
 
   .room-item:hover {
-    background-color: rgba(255, 255, 255, 0.03);
-    color: #f3f4f6;
+    background-color: #2a2d2e;
+    color: #cccccc;
   }
 
   .room-item.active {
-    background-color: rgba(99, 102, 241, 0.15);
-    color: #818cf8;
+    background-color: #37373d;
+    color: #ffffff;
     font-weight: 600;
   }
 
   .hash {
-    color: #4b5563;
+    color: #858585;
     font-weight: 400;
   }
 
   .room-item.active .hash {
-    color: #818cf8;
+    color: #007acc;
   }
 
   .user-profile {
     padding: 1rem;
-    background-color: #0f172a;
-    border-top: 1px solid #1f2937;
+    background-color: #252526;
+    border-top: 1px solid #333333;
     display: flex;
     align-items: center;
     gap: 0.75rem;
@@ -446,7 +444,7 @@
     width: 40px;
     height: 40px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+    background: #007acc;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -494,13 +492,13 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    background-color: #0b1329;
+    background-color: #1e1e1e;
   }
 
   .chat-header {
     height: 70px;
     padding: 0 1.5rem;
-    border-bottom: 1px solid #1f2937;
+    border-bottom: 1px solid #333333;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -570,13 +568,13 @@
     width: 38px;
     height: 38px;
     border-radius: 8px;
-    background: #1f2937;
+    background: #3c3c3c;
     display: flex;
     align-items: center;
     justify-content: center;
     font-weight: 600;
     font-size: 0.85rem;
-    color: #9ca3af;
+    color: #cccccc;
     flex-shrink: 0;
   }
 
@@ -616,16 +614,16 @@
     padding: 1.5rem;
     display: flex;
     gap: 0.75rem;
-    border-top: 1px solid #1f2937;
+    border-top: 1px solid #333333;
   }
 
   .message-input-form textarea {
     flex: 1;
-    background-color: #111827;
-    border: 1px solid #1f2937;
+    background-color: #3c3c3c;
+    border: 1px solid #3c3c3c;
     border-radius: 8px;
     padding: 0.85rem 1rem;
-    color: #f3f4f6;
+    color: #cccccc;
     font-size: 0.95rem;
     font-family: inherit;
     outline: none;
@@ -636,7 +634,7 @@
   }
 
   .message-input-form textarea:focus {
-    border-color: #6366f1;
+    border-color: #007acc;
   }
 
   .attachment-btn {
@@ -659,7 +657,7 @@
   }
 
   .message-input-form .send-btn {
-    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    background: #007acc;
     color: white;
     border: none;
     outline: none;
@@ -729,8 +727,8 @@
   }
 
   .skeleton {
-    background: #1f2937;
-    background-image: linear-gradient(90deg, #1f2937 0px, #374151 40px, #1f2937 80px);
+    background: #333333;
+    background-image: linear-gradient(90deg, #333333 0px, #3c3c3c 40px, #333333 80px);
     background-size: 800px 100%;
     animation: shimmer 2s infinite linear;
   }
