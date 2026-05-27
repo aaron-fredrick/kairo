@@ -132,6 +132,7 @@ class AdminService:
           - 'moderators'  — visible and writable by admins and moderators
         """
         for name, description in (
+            ("public", "Public discussion channel"),
             (SYSTEM_ROOM_ADMIN, "Private admin-only channel"),
             (SYSTEM_ROOM_MODS, "Private channel for admins and moderators"),
         ):

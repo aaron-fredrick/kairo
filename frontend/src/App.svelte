@@ -1,6 +1,6 @@
 <script>
   let rooms = [
-    { id: 1, name: 'general', description: 'General discussion channel' },
+    { id: 1, name: 'public', description: 'Public discussion channel' },
     { id: 2, name: 'random', description: 'Random thoughts & links' },
     { id: 3, name: 'tech', description: 'Technology and coding talk' },
     { id: 4, name: 'announcements', description: 'Important updates' }
@@ -102,7 +102,7 @@
   <section class="chat-container">
     <header class="chat-header">
       <div class="room-title">
-        <h2>#{rooms.find(r => r.id === selectedRoomId)?.name || 'general'}</h2>
+        <h2>#{rooms.find(r => r.id === selectedRoomId)?.name || 'public'}</h2>
         <p class="room-description">{rooms.find(r => r.id === selectedRoomId)?.description || ''}</p>
       </div>
       <div class="connection-status">
@@ -143,7 +143,7 @@
       <input 
         type="text" 
         bind:value={currentMessage} 
-        placeholder="Message #{rooms.find(r => r.id === selectedRoomId)?.name || 'general'}..." 
+        placeholder="Message #{rooms.find(r => r.id === selectedRoomId)?.name || 'public'}..." 
       />
       <button type="submit" class="send-btn" disabled={!currentMessage.trim()}>Send</button>
     </form>

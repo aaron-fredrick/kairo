@@ -15,8 +15,8 @@ class Message(Base, TimestampMixin):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     
     sender_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    room_id: Mapped[int] = mapped_column(ForeignKey("rooms.id", ondelete="CASCADE"), nullable=True)
+    room_id: Mapped[int] = mapped_column(ForeignKey("rooms.id", ondelete="CASCADE"), nullable=False)
 
     # Relationships
     sender: Mapped["User"] = relationship(back_populates="messages")
-    room: Mapped[Optional["Room"]] = relationship(back_populates="messages")
+    room: Mapped["Room"] = relationship(back_populates="messages")

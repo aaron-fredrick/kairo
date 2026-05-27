@@ -60,8 +60,6 @@ async def websocket_endpoint(
     rejected with close code 1008 (policy violation) if the token is absent,
     invalid, the session has expired, or the user's role does not grant access
     to the requested room (applies to the 'admins' and 'moderators' rooms).
-
-    A null room_id of 0 is the public channel — accessible to all roles.
     """
     client_host = websocket.client.host if websocket.client else "unknown"
 
@@ -86,17 +84,21 @@ async def websocket_endpoint(
         return
 
     # Enforce system-room access control.
-    if room_id != 0:
-        room_name = await _resolve_room_name(room_id, db)
-        if _is_room_access_denied(room_name, role):
-            logger.warning(
-                "WS rejected (insufficient role): user='%s' role='%s' room='%s'",
-                username,
-                role,
-                room_name,
-            )
-            await websocket.close(code=1008)
-            return
+    room_name = await _resolve_room_name(room_id, db)
+    if room_name is None:
+        logger.warning("WS rejected (room not found): room_id=%d", room_id)
+        await websocket.close(code=1008)
+        return
+
+    if _is_room_access_denied(room_name, role):
+        logger.warning(
+            "WS rejected (insufficient role): user='%s' role='%s' room='%s'",
+            username,
+            role,
+            room_name,
+        )
+        await websocket.close(code=1008)
+        return
 
     await manager.connect(websocket, room_id)
     await auth_service.refresh_user_activity(redis_client, username)
