@@ -1,22 +1,35 @@
 """
-Upload API endpoint.
+Upload API.
 
-POST /api/v1/uploads
-    - Accepts a multipart file upload (requires valid Bearer token).
-    - Computes a SHA-256 hash of the raw bytes; this becomes the hash_id.
-    - Saves the file via the configured storage backend (no extension in filename).
-    - Persists an Upload record in the database.
-    - Returns the file URL, assumed thumbnail URLs, name, extension, and size
-      *immediately* — the thumbnail worker runs asynchronously in the background.
+Pre-upload workflow
+-------------------
+Files are uploaded BEFORE the user composes a message:
+
+  1. Client POSTs multipart to  POST /api/v1/uploads?room_id=<n>
+  2. Server streams file → BlobManager (SHA-256, dedup, persist)
+  3. Server persists an Upload DB record (idempotent on hash)
+  4. Server enqueues:
+       a. ThumbnailJob  — background thumbnail generation
+       b. BroadcastJob  — immediate "file_uploaded" WS event (thumbnails_ready=false)
+  5. Server returns { blob_hash, file_url, thumbnails, thumbnails_ready=false }
+  6. Client stores blob_hash and attaches it when the user hits Send.
+
+When thumbnails finish, the ThumbnailWorker enqueues another BroadcastJob
+("thumbnails_ready") so all connected clients update in real-time.
+
+Blob retrieval
+--------------
+  GET /api/v1/uploads/blob/<blob_hash>    → raw file bytes
+  GET /api/v1/uploads/status/<blob_hash>  → Upload record metadata
 """
 from __future__ import annotations
 
-import hashlib
 import mimetypes
 import os
-from typing import List
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,18 +39,14 @@ from app.core.config import settings
 from app.core.logging import get_logger
 from app.db.database import get_db
 from app.models.upload import Upload
-from app.storage.backends import storage_backend
+from app.services.thumbnail_service import THUMBNAIL_SIZES
+from app.storage.blob_manager import blob_manager
 from app.workers.broadcast import BroadcastJob, broadcast_queue
 from app.workers.thumbnail import ThumbnailJob, thumbnail_queue
-from app.services.thumbnail_service import THUMBNAIL_SIZES
 
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/uploads", tags=["uploads"])
-
-# Room ID used when no specific room context is provided — broadcasts to room 0
-# so server-wide listeners receive the event.
-_GLOBAL_ROOM_ID = 0
 
 
 # ---------------------------------------------------------------------------
@@ -53,7 +62,7 @@ class ThumbnailURLs(BaseModel):
 class UploadResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    hash_id: str
+    blob_hash: str
     original_filename: str
     extension: str
     mime_type: str
@@ -61,35 +70,60 @@ class UploadResponse(BaseModel):
     file_url: str
     thumbnails: ThumbnailURLs
     thumbnails_ready: bool
+    status: str  # "stored" | "reused"
+
+
+class UploadStatusResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    blob_hash: str
+    original_filename: str
+    mime_type: str
+    size_bytes: int
+    thumbnails_ready: bool
+    thumbnails: ThumbnailURLs
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _derive_thumbnail_urls(hash_id: str) -> ThumbnailURLs:
-    """
-    Return assumed thumbnail URLs for the three standard sizes.
-    The actual files may not exist yet if the worker hasn't finished.
-    Format: {UPLOAD_BASE_URL}/thumbnails/{hash_id}_{w}x{h}.jpeg
-    """
+def _thumbnail_urls(blob_hash: str) -> ThumbnailURLs:
     base = settings.UPLOAD_BASE_URL.rstrip("/")
-    urls = {}
-    for label, (w, h) in THUMBNAIL_SIZES.items():
-        urls[label] = f"{base}/thumbnails/{hash_id}_{w}x{h}.jpeg"
-    return ThumbnailURLs(**urls)
+    return ThumbnailURLs(**{
+        label: f"{base}/thumbnails/{blob_hash}_{w}x{h}.jpeg"
+        for label, (w, h) in THUMBNAIL_SIZES.items()
+    })
 
 
-def _guess_mime(filename: str, default: str = "application/octet-stream") -> str:
+def _file_url(blob_hash: str) -> str:
+    return f"{settings.UPLOAD_BASE_URL.rstrip('/')}/files/{blob_hash}"
+
+
+def _guess_mime(filename: str) -> str:
     mime, _ = mimetypes.guess_type(filename)
-    return mime or default
+    return mime or "application/octet-stream"
+
+
+def _build_response(upload: Upload, blob_status: str) -> UploadResponse:
+    return UploadResponse(
+        blob_hash=upload.hash_id,
+        original_filename=upload.original_filename,
+        extension=upload.extension,
+        mime_type=upload.mime_type,
+        size_bytes=upload.size_bytes,
+        file_url=_file_url(upload.hash_id),
+        thumbnails=_thumbnail_urls(upload.hash_id),
+        thumbnails_ready=upload.thumbnails_ready,
+        status=blob_status,
+    )
 
 
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
 
-@router.post("/", response_model=UploadResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=UploadResponse, status_code=status.HTTP_201_CREATED)
 async def upload_file(
     file: UploadFile,
     room_id: int = 0,
@@ -97,53 +131,48 @@ async def upload_file(
     _username: str = Depends(get_current_username),
 ) -> UploadResponse:
     """
-    Accept a file upload, persist it, and return its URLs.
+    Pre-upload a file before attaching it to a message.
 
-    Pass `room_id` to broadcast the upload event to that room's connected
-    WebSocket clients.  Omit it (defaults to 0) for a server-wide broadcast.
+    The file is streamed through the BlobManager which computes its SHA-256
+    on-the-fly and deduplicates it against already-stored blobs. The Upload
+    DB record is created (or re-used if duplicate). A thumbnail job is enqueued
+    in the background, and a 'file_uploaded' WebSocket event is broadcast to
+    the room immediately — before thumbnails are ready.
 
-    Thumbnail generation happens asynchronously in the background — the
-    response is returned immediately with pre-computed (assumed) thumbnail URLs.
+    Returns the blob_hash which the client must include when sending the message.
     """
-    max_bytes = settings.UPLOAD_MAX_SIZE_MB * 1024 * 1024
-    data = await file.read(max_bytes + 1)
-
-    if len(data) > max_bytes:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"File exceeds the maximum allowed size of {settings.UPLOAD_MAX_SIZE_MB} MB.",
-        )
-
     original_filename = file.filename or "unknown"
     _, dot_ext = os.path.splitext(original_filename)
     extension = dot_ext.lstrip(".").lower() or "bin"
     mime_type = _guess_mime(original_filename)
-    size_bytes = len(data)
 
-    # Derive content-addressed hash_id from the raw file bytes
-    hash_id = hashlib.sha256(data).hexdigest()
-    file_sha256 = hash_id
+    try:
+        blob = await blob_manager.create_blob(file)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=str(exc))
 
-    # Idempotency — return existing record if this exact file was already uploaded
-    existing_result = await db.execute(select(Upload).where(Upload.hash_id == hash_id))
-    existing: Upload | None = existing_result.scalars().first()
+    # Idempotent DB record — reuse existing if blob was deduplicated.
+    existing_result = await db.execute(select(Upload).where(Upload.hash_id == blob.blob_hash))
+    existing: Optional[Upload] = existing_result.scalars().first()
+
     if existing:
-        logger.info("Duplicate upload detected for hash_id='%s' — returning existing record", hash_id)
-        return _build_response(existing)
+        logger.info("Duplicate upload: hash=%s — returning existing record", blob.blob_hash)
+        return _build_response(existing, blob.status)
 
-    # Persist file bytes (no extension in the stored filename)
-    relative_path = f"files/{hash_id}"
-    file_url = await storage_backend.save(data, relative_path)
+    # Also save via the legacy backend so static file serving still works.
+    from app.storage.backends import storage_backend
+    raw_data = await blob_manager.get_blob(blob.blob_hash)
+    await storage_backend.save(raw_data, f"files/{blob.blob_hash}")
 
     upload = Upload(
         original_filename=original_filename,
         extension=extension,
         mime_type=mime_type,
-        size_bytes=size_bytes,
-        hash_id=hash_id,
+        size_bytes=blob.size_bytes,
+        hash_id=blob.blob_hash,
         storage_backend=settings.UPLOAD_BACKEND,
-        storage_path=relative_path,
-        file_sha256=file_sha256,
+        storage_path=blob.storage_path,
+        file_sha256=blob.blob_hash,
         thumbnails_ready=False,
     )
     db.add(upload)
@@ -151,57 +180,79 @@ async def upload_file(
     await db.refresh(upload)
 
     logger.info(
-        "Upload saved: hash_id='%s', file='%s', backend='%s'",
-        hash_id, original_filename, settings.UPLOAD_BACKEND,
+        "Upload persisted: hash=%s file='%s' backend='%s'",
+        blob.blob_hash, original_filename, settings.UPLOAD_BACKEND,
     )
 
-    # Enqueue thumbnail generation — fire-and-forget
+    # Enqueue background thumbnail generation.
     await thumbnail_queue.put(
         ThumbnailJob(
-            hash_id=hash_id,
-            file_data=data,
+            hash_id=blob.blob_hash,
+            file_data=raw_data,
             mime_type=mime_type,
             extension=extension,
             room_id=room_id,
         )
     )
-    logger.debug("Thumbnail job queued for hash_id='%s'", hash_id)
 
-    # Immediately broadcast the upload event so WS clients learn about the file
-    # before thumbnails are ready.  room_id=0 signals a server-wide event;
-    # callers should pass a room_id query param when a specific room context exists.
-    thumb_urls = _derive_thumbnail_urls(hash_id)
+    # Immediately broadcast file_uploaded so clients render a placeholder.
     await broadcast_queue.put(
         BroadcastJob(
             room_id=room_id,
             event_type="file_uploaded",
             payload={
-                "hash_id": hash_id,
+                "blob_hash": blob.blob_hash,
                 "filename": original_filename,
                 "extension": extension,
                 "mime_type": mime_type,
-                "size_bytes": size_bytes,
-                "file_url": f"{settings.UPLOAD_BASE_URL.rstrip('/')}/files/{hash_id}",
-                "thumbnails": thumb_urls.model_dump(),
+                "size_bytes": blob.size_bytes,
+                "file_url": _file_url(blob.blob_hash),
+                "thumbnails": _thumbnail_urls(blob.blob_hash).model_dump(),
                 "thumbnails_ready": False,
             },
         )
     )
-    logger.debug("Broadcast job queued for hash_id='%s' (file_uploaded)", hash_id)
 
-    return _build_response(upload)
+    return _build_response(upload, blob.status)
 
 
-def _build_response(upload: Upload) -> UploadResponse:
-    base = settings.UPLOAD_BASE_URL.rstrip("/")
-    file_url = f"{base}/files/{upload.hash_id}"
-    return UploadResponse(
-        hash_id=upload.hash_id,
+@router.get("/blob/{blob_hash}", response_class=Response)
+async def serve_blob(
+    blob_hash: str,
+    db: AsyncSession = Depends(get_db),
+    _username: str = Depends(get_current_username),
+) -> Response:
+    """Serve raw blob bytes. Content-Type is derived from the Upload record."""
+    result = await db.execute(select(Upload).where(Upload.hash_id == blob_hash))
+    upload: Optional[Upload] = result.scalars().first()
+    if not upload:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Blob not found.")
+
+    try:
+        data = await blob_manager.get_blob(blob_hash)
+    except FileNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Blob data missing from storage.")
+
+    return Response(content=data, media_type=upload.mime_type)
+
+
+@router.get("/status/{blob_hash}", response_model=UploadStatusResponse)
+async def blob_status(
+    blob_hash: str,
+    db: AsyncSession = Depends(get_db),
+    _username: str = Depends(get_current_username),
+) -> UploadStatusResponse:
+    """Return the current DB record for a blob, including thumbnail readiness."""
+    result = await db.execute(select(Upload).where(Upload.hash_id == blob_hash))
+    upload: Optional[Upload] = result.scalars().first()
+    if not upload:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Blob not found.")
+
+    return UploadStatusResponse(
+        blob_hash=upload.hash_id,
         original_filename=upload.original_filename,
-        extension=upload.extension,
         mime_type=upload.mime_type,
         size_bytes=upload.size_bytes,
-        file_url=file_url,
-        thumbnails=_derive_thumbnail_urls(upload.hash_id),
         thumbnails_ready=upload.thumbnails_ready,
+        thumbnails=_thumbnail_urls(upload.hash_id),
     )

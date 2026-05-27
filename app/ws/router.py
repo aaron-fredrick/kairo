@@ -130,20 +130,50 @@ async def websocket_endpoint(
             await auth_service.refresh_user_activity(redis_client, username)
             
             content = event_data.get("content")
-            if content:
+            blob_hash: str | None = event_data.get("blob_hash")
+
+            if content or blob_hash:
                 async with AsyncSessionLocal() as session:
-                    message = Message(sender_id=sender_id, room_id=room_id, content=content)
+                    message = Message(
+                        sender_id=sender_id,
+                        room_id=room_id,
+                        content=content or "",
+                    )
                     session.add(message)
                     await session.commit()
                     await session.refresh(message)
-                    
+
                     event_data["id"] = message.id
                     if message.created_at:
                         event_data["created_at"] = message.created_at.isoformat()
                     else:
                         from datetime import datetime
                         event_data["created_at"] = datetime.utcnow().isoformat()
-                        
+
+                    # Attach file metadata so all clients render the attachment card.
+                    if blob_hash:
+                        from sqlalchemy import select as _select
+                        from app.models.upload import Upload
+                        from app.core.config import settings
+                        from app.services.thumbnail_service import THUMBNAIL_SIZES
+
+                        result = await session.execute(_select(Upload).where(Upload.hash_id == blob_hash))
+                        upload = result.scalars().first()
+                        if upload:
+                            base = settings.UPLOAD_BASE_URL.rstrip("/")
+                            event_data["attachment"] = {
+                                "blob_hash": blob_hash,
+                                "filename": upload.original_filename,
+                                "mime_type": upload.mime_type,
+                                "size_bytes": upload.size_bytes,
+                                "file_url": f"{base}/files/{blob_hash}",
+                                "thumbnails": {
+                                    label: f"{base}/thumbnails/{blob_hash}_{w}x{h}.jpeg"
+                                    for label, (w, h) in THUMBNAIL_SIZES.items()
+                                },
+                                "thumbnails_ready": upload.thumbnails_ready,
+                            }
+
                 event_data["event"] = "new_message"
 
             event_data["sender"] = username
@@ -155,3 +185,4 @@ async def websocket_endpoint(
     except WebSocketDisconnect:
         manager.disconnect(websocket, room_id)
         logger.info("WS disconnected: user='%s' room_id=%d", username, room_id)
+
