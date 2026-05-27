@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+echo "Starting Kairo backend with hot-reload..."
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload --proxy-headers
