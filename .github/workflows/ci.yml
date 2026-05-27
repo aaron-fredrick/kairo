@@ -167,8 +167,11 @@ jobs:
           pip install pytest httpx pytest-asyncio
           
       - name: Run Pytest
-        # Generate JUnit XML report
-        run: pytest --junitxml=test-report.xml
+        # Start the server in the background for integration and smoke tests
+        run: |
+          uvicorn app.main:app --host 127.0.0.1 --port 8000 &
+          sleep 3
+          pytest --junitxml=test-report.xml
         continue-on-error: true
         
       - name: Upload Test Report

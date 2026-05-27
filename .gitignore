@@ -23,6 +23,9 @@ wheels/
 .pytest_cache/
 .coverage
 htmlcov/
+test-report.xml
+pytest_out.txt
+smoke_test*.py
 
 # Node / JS
 node_modules/
