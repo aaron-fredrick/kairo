@@ -160,26 +160,26 @@ async def get_room_messages(
             thumbnails_ready=upload.thumbnails_ready,
         )
 
-        def _get_pfp_urls(user) -> Optional[dict]:
-            if not user.pfp_hash:
-                return None
-            return {
-                "128": f"/pfps/{user.pfp_hash}_128.webp",
-                "512": f"/pfps/{user.pfp_hash}_512.webp",
-                "1024": f"/pfps/{user.pfp_hash}_1024.webp",
-            }
+    def _get_pfp_urls(user) -> Optional[dict]:
+        if not user.pfp_hash:
+            return None
+        return {
+            "128": f"/pfps/{user.pfp_hash}_128.webp",
+            "512": f"/pfps/{user.pfp_hash}_512.webp",
+            "1024": f"/pfps/{user.pfp_hash}_1024.webp",
+        }
 
-        return [
-            MessageResponse(
-                id=m.id,
-                content=m.content,
-                sender_id=m.sender_id,
-                sender_username=m.sender.username,
-                sender_pfp_urls=_get_pfp_urls(m.sender),
-                room_id=m.room_id,
-                created_at=m.created_at,
-                attachments=[_serialize_attachment(a) for a in m.attachments] or None,
-            ) for m in reversed(messages)
-        ]
+    return [
+        MessageResponse(
+            id=m.id,
+            content=m.content,
+            sender_id=m.sender_id,
+            sender_username=m.sender.username,
+            sender_pfp_urls=_get_pfp_urls(m.sender),
+            room_id=m.room_id,
+            created_at=m.created_at,
+            attachments=[_serialize_attachment(a) for a in m.attachments] or None,
+        ) for m in reversed(messages)
+    ]
 
 
