@@ -134,32 +134,33 @@ async def websocket_endpoint(
 
             if content or incoming_attachments:
                 async with AsyncSessionLocal() as session:
+                    # Create the message first so we have a message_id for attachments
+                    message = Message(
+                        sender_id=sender_id,
+                        room_id=room_id,
+                        content=content or "",
+                    )
+                    session.add(message)
+                    await session.flush()  # populate message.id
+
                     attachments_data = []
                     if incoming_attachments:
                         from app.services.upload_service import confirm_upload
-                        import asyncio
-                        
-                        # Process pending uploads sequentially since SQLAlchemy AsyncSession
-                        # cannot be used concurrently by multiple coroutines.
+
+                        # Sequential: AsyncSession cannot be shared across concurrent coroutines
                         for att in incoming_attachments:
                             res = await confirm_upload(
                                 upload_id=att.get("upload_id", ""),
                                 original_filename=att.get("filename", ""),
                                 mime_type=att.get("mime_type", ""),
                                 size_bytes=att.get("size_bytes", 0),
+                                message_id=message.id,
                                 room_id=room_id,
                                 db=session,
                             )
                             if res:
                                 attachments_data.append(res)
 
-                    message = Message(
-                        sender_id=sender_id,
-                        room_id=room_id,
-                        content=content or "",
-                        attachments=attachments_data if attachments_data else None,
-                    )
-                    session.add(message)
                     await session.commit()
                     await session.refresh(message)
 

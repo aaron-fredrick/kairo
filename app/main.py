@@ -101,7 +101,7 @@ app.add_middleware(IPAccessMiddleware)
 app.include_router(api_router)
 app.include_router(ws_router)
 
-from app.api.files import router as files_router
+from app.files.router import router as files_router
 app.include_router(files_router)
 
 # Data directory setup

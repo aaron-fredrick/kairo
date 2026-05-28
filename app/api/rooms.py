@@ -34,6 +34,20 @@ class RoomResponse(BaseModel):
         from_attributes = True
 
 
+class AttachmentResponse(BaseModel):
+    attachment_id: int
+    blob_hash: str
+    filename: str
+    mime_type: str
+    size_bytes: int
+    file_url: str
+    thumbnails: dict
+    thumbnails_ready: bool
+
+    class Config:
+        from_attributes = True
+
+
 class MessageResponse(BaseModel):
     id: int
     content: str
@@ -41,7 +55,7 @@ class MessageResponse(BaseModel):
     sender_username: str
     room_id: int
     created_at: datetime
-    attachments: Optional[List[dict]] = None
+    attachments: Optional[List[AttachmentResponse]] = None
 
     class Config:
         from_attributes = True
@@ -115,16 +129,36 @@ async def get_room_messages(
     )
     from sqlalchemy import select
     from sqlalchemy.orm import joinedload
+    from app.services.thumbnail_service import THUMBNAIL_SIZES, thumbnail_url
     
     result = await db.execute(
         select(Message)
-        .options(joinedload(Message.sender))
+        .options(
+            joinedload(Message.sender),
+            joinedload(Message.attachments).joinedload("upload"),
+        )
         .where(Message.room_id == room_id)
         .order_by(Message.created_at.desc())
         .limit(limit)
     )
-    messages = result.scalars().all()
+    messages = result.scalars().unique().all()
     
+    def _serialize_attachment(att) -> AttachmentResponse:
+        upload = att.upload
+        return AttachmentResponse(
+            attachment_id=att.id,
+            blob_hash=upload.hash_id,
+            filename=att.filename,
+            mime_type=upload.mime_type,
+            size_bytes=upload.size_bytes,
+            file_url=f"/download/{att.id}",
+            thumbnails={
+                label: thumbnail_url(upload.hash_id, label)
+                for label in THUMBNAIL_SIZES.keys()
+            },
+            thumbnails_ready=upload.thumbnails_ready,
+        )
+
     return [
         MessageResponse(
             id=m.id,
@@ -133,7 +167,7 @@ async def get_room_messages(
             sender_username=m.sender.username,
             room_id=m.room_id,
             created_at=m.created_at,
-            attachments=m.attachments
+            attachments=[_serialize_attachment(a) for a in m.attachments] or None,
         ) for m in reversed(messages)
     ]
 

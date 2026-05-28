@@ -5,5 +5,6 @@ from app.models.room import Room
 from app.models.message import Message
 from app.models.direct_message import DirectMessage
 from app.models.upload import Upload
+from app.models.attachment import Attachment
 
-__all__ = ["Base", "TimestampMixin", "User", "Room", "Message", "DirectMessage", "Upload"]
+__all__ = ["Base", "TimestampMixin", "User", "Room", "Message", "DirectMessage", "Upload", "Attachment"]

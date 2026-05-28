@@ -1,9 +1,12 @@
 """
 Upload lifecycle service.
+
+confirm_upload is called from the WebSocket router after a message is saved.
+It finalises the staged temp file into a permanent blob and creates an
+Attachment row linking the blob to the message.
 """
 from __future__ import annotations
 
-import mimetypes
 import os
 from typing import Optional
 
@@ -12,9 +15,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.models.attachment import Attachment
 from app.models.upload import Upload
-from app.storage.blob_manager import BlobResult, blob_manager
 from app.services.thumbnail_service import THUMBNAIL_SIZES, thumbnail_url
+from app.storage.blob_manager import BlobResult, blob_manager
 from app.workers.thumbnail import ThumbnailJob, thumbnail_queue
 
 logger = get_logger(__name__)
@@ -25,38 +29,43 @@ async def confirm_upload(
     original_filename: str,
     mime_type: str,
     size_bytes: int,
+    message_id: int,
     room_id: int,
     db: AsyncSession,
-) -> dict:
+) -> Optional[dict]:
     """
-    Confirms an upload staged in the temp directory.
-    - Hashes and strips EXIF via BlobManager.
-    - Creates or re-uses the Upload DB record.
-    - Enqueues a thumbnail job.
-    - Deletes the temp file.
-    - Returns the attachment dictionary for the WS broadcast.
+    Finalises a staged temp upload:
+    1. Reads the temp file, strips EXIF, and hashes via BlobManager.
+    2. Creates (or reuses) the Upload blob record.
+    3. Creates an Attachment row linking the blob to the message.
+    4. Enqueues thumbnail generation if the blob is new.
+    5. Deletes the temp file.
+
+    Returns a serialisable attachment dict for the WebSocket broadcast, or
+    None if the temp file is missing.
     """
     temp_path = os.path.join(settings.TEMP_UPLOAD_DIR, upload_id)
     if not os.path.exists(temp_path):
-        logger.warning("Temp upload %s missing.", temp_path)
-        return {}
+        logger.warning("Temp upload %s not found — skipping.", upload_id)
+        return None
 
     _, dot_ext = os.path.splitext(original_filename)
     extension = dot_ext.lstrip(".").lower() or "bin"
     mime_type = mime_type or "application/octet-stream"
 
-    # 1. Ingest via BlobManager (this strips EXIF for images and hashes)
+    # 1. Ingest blob (EXIF-stripped, content-addressed)
     try:
         blob: BlobResult = await blob_manager.create_blob_from_path(temp_path, mime_type=mime_type)
     except ValueError as e:
         logger.error("Upload size exceeded: %s", e)
-        return {}
+        return None
 
-    # 2. Check for duplicate DB record
-    existing_result = await db.execute(select(Upload).where(Upload.hash_id == blob.blob_hash))
-    upload: Optional[Upload] = existing_result.scalars().first()
+    # 2. Find or create the Upload (blob) record
+    existing = await db.execute(select(Upload).where(Upload.hash_id == blob.blob_hash))
+    upload: Optional[Upload] = existing.scalars().first()
+    is_new_blob = upload is None
 
-    if not upload:
+    if is_new_blob:
         upload = Upload(
             original_filename=original_filename,
             extension=extension,
@@ -69,13 +78,22 @@ async def confirm_upload(
             thumbnails_ready=False,
         )
         db.add(upload)
-        await db.commit()
-        await db.refresh(upload)
+        await db.flush()   # obtain upload.id without a full commit
+        logger.info("Upload blob persisted: hash=%s", blob.blob_hash)
+    else:
+        logger.info("Reusing existing blob: hash=%s", blob.blob_hash)
 
-        logger.info("Upload persisted: hash=%s", blob.blob_hash)
+    # 3. Create the Attachment row (filename is message-specific)
+    attachment = Attachment(
+        message_id=message_id,
+        upload_id=upload.id,
+        filename=original_filename,
+    )
+    db.add(attachment)
+    await db.flush()
 
-        # Enqueue thumbnail generation for the new blob
-        # We need the raw bytes for the thumbnail worker.
+    # 4. Enqueue thumbnail generation for new blobs only
+    if is_new_blob:
         raw_data = await blob_manager.get_blob(blob.blob_hash)
         await thumbnail_queue.put(
             ThumbnailJob(
@@ -86,22 +104,20 @@ async def confirm_upload(
                 room_id=room_id,
             )
         )
-    else:
-        logger.info("Duplicate upload reused: hash=%s", blob.blob_hash)
 
-    # 3. Cleanup temp file
+    # 5. Cleanup temp file
     try:
         os.remove(temp_path)
     except OSError:
         pass
 
-    # 4. Return metadata for WS broadcast
     return {
+        "attachment_id": attachment.id,
         "blob_hash": blob.blob_hash,
-        "filename": upload.original_filename,
+        "filename": attachment.filename,
         "mime_type": upload.mime_type,
         "size_bytes": upload.size_bytes,
-        "file_url": f"/download/{blob.blob_hash}",
+        "file_url": f"/download/{attachment.id}",
         "thumbnails": {
             label: thumbnail_url(blob.blob_hash, label)
             for label in THUMBNAIL_SIZES.keys()
