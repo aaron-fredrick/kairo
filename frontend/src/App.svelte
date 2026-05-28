@@ -94,6 +94,7 @@
       messages = data.map(m => ({
         id: m.id,
         sender: m.sender_username,
+        sender_pfp_urls: m.sender_pfp_urls,
         content: m.content,
         time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         loading: false,
