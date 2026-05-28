@@ -128,20 +128,21 @@ async def get_room_messages(
         limit,
     )
     from sqlalchemy import select
-    from sqlalchemy.orm import joinedload
+    from sqlalchemy.orm import selectinload
     from app.services.thumbnail_service import THUMBNAIL_SIZES, thumbnail_url
+    from app.models.attachment import Attachment
     
     result = await db.execute(
         select(Message)
         .options(
-            joinedload(Message.sender),
-            joinedload(Message.attachments).joinedload("upload"),
+            selectinload(Message.sender),
+            selectinload(Message.attachments).selectinload(Attachment.upload),
         )
         .where(Message.room_id == room_id)
         .order_by(Message.created_at.desc())
         .limit(limit)
     )
-    messages = result.scalars().unique().all()
+    messages = result.scalars().all()
     
     def _serialize_attachment(att) -> AttachmentResponse:
         upload = att.upload
