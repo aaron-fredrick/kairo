@@ -299,9 +299,8 @@
     {isLoadingMessages}
     {token}
     bind:currentMessage
-    {isUploading}
     {activeUsers}
-    on:sendMessage={sendMessage}
+    on:send={sendMessage}
   />
 </main>
 
