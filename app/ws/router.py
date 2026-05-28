@@ -144,12 +144,13 @@ async def websocket_endpoint(
                     await session.flush()  # populate message.id
 
                     attachments_data = []
+                    thumbnail_jobs = []
                     if incoming_attachments:
                         from app.services.upload_service import confirm_upload
 
                         # Sequential: AsyncSession cannot be shared across concurrent coroutines
                         for att in incoming_attachments:
-                            res = await confirm_upload(
+                            res, job = await confirm_upload(
                                 upload_id=att.get("upload_id", ""),
                                 original_filename=att.get("filename", ""),
                                 mime_type=att.get("mime_type", ""),
@@ -160,6 +161,8 @@ async def websocket_endpoint(
                             )
                             if res:
                                 attachments_data.append(res)
+                            if job:
+                                thumbnail_jobs.append(job)
 
                     await session.commit()
                     await session.refresh(message)
@@ -181,6 +184,14 @@ async def websocket_endpoint(
 
             from app.core.event_bus import event_bus
             await event_bus.publish(f"room:{room_id}:events", json.dumps(event_data))
+
+            # Enqueue thumbnail jobs AFTER the message is broadcast to clients,
+            # preventing a race condition where the 'thumbnails_ready' event 
+            # beats the 'new_message' event.
+            if content or incoming_attachments:
+                from app.workers.thumbnail import thumbnail_queue
+                for job in thumbnail_jobs:
+                    await thumbnail_queue.put(job)
 
     except WebSocketDisconnect:
         manager.disconnect(websocket, room_id)

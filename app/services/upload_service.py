@@ -8,7 +8,7 @@ Attachment row linking the blob to the message.
 from __future__ import annotations
 
 import os
-from typing import Optional
+from typing import Optional, Tuple
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,7 +32,7 @@ async def confirm_upload(
     message_id: int,
     room_id: int,
     db: AsyncSession,
-) -> Optional[dict]:
+) -> Tuple[Optional[dict], Optional[ThumbnailJob]]:
     """
     Finalises a staged temp upload:
     1. Reads the temp file, strips EXIF, and hashes via BlobManager.
@@ -41,13 +41,14 @@ async def confirm_upload(
     4. Enqueues thumbnail generation if the blob is new.
     5. Deletes the temp file.
 
-    Returns a serialisable attachment dict for the WebSocket broadcast, or
-    None if the temp file is missing.
+    Returns a tuple containing:
+    1. A serialisable attachment dict for the WebSocket broadcast, or None if the temp file is missing.
+    2. A ThumbnailJob to be enqueued AFTER the message broadcast, or None.
     """
     temp_path = os.path.join(settings.TEMP_UPLOAD_DIR, upload_id)
     if not os.path.exists(temp_path):
         logger.warning("Temp upload %s not found — skipping.", upload_id)
-        return None
+        return None, None
 
     _, dot_ext = os.path.splitext(original_filename)
     extension = dot_ext.lstrip(".").lower() or "bin"
@@ -58,7 +59,7 @@ async def confirm_upload(
         blob: BlobResult = await blob_manager.create_blob_from_path(temp_path, mime_type=mime_type)
     except ValueError as e:
         logger.error("Upload size exceeded: %s", e)
-        return None
+        return None, None
 
     # 2. Find or create the Upload (blob) record
     existing = await db.execute(select(Upload).where(Upload.hash_id == blob.blob_hash))
@@ -92,17 +93,16 @@ async def confirm_upload(
     db.add(attachment)
     await db.flush()
 
-    # 4. Enqueue thumbnail generation for new blobs only
+    # 4. Prepare thumbnail generation job for new blobs only
+    job = None
     if is_new_blob:
         raw_data = await blob_manager.get_blob(blob.blob_hash)
-        await thumbnail_queue.put(
-            ThumbnailJob(
-                hash_id=blob.blob_hash,
-                file_data=raw_data,
-                mime_type=mime_type,
-                extension=extension,
-                room_id=room_id,
-            )
+        job = ThumbnailJob(
+            hash_id=blob.blob_hash,
+            file_data=raw_data,
+            mime_type=mime_type,
+            extension=extension,
+            room_id=room_id,
         )
 
     # 5. Cleanup temp file
@@ -123,4 +123,4 @@ async def confirm_upload(
             for label in THUMBNAIL_SIZES.keys()
         },
         "thumbnails_ready": upload.thumbnails_ready,
-    }
+    }, job
