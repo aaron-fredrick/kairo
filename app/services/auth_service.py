@@ -5,6 +5,7 @@ from typing import Optional, Tuple, List
 
 from fastapi import HTTPException, status
 from redis.asyncio import Redis
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.logging import get_logger

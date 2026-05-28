@@ -1,4 +1,4 @@
-from typing import Optional, Dict, List, Union, Any
+from typing import Optional, Dict, List, Union
 import redis.asyncio as aioredis
 from app.core.config import settings
 

@@ -14,12 +14,11 @@ Each job carries everything the worker needs:
 from __future__ import annotations
 
 import asyncio
-import hashlib
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from app.core.logging import get_logger
-from app.services.thumbnail_service import THUMBNAIL_SIZES, generate_and_save_thumbnails
+from app.services.thumbnail_service import generate_and_save_thumbnails
 from app.storage.backends import StorageBackend
 
 if TYPE_CHECKING:
@@ -50,7 +49,6 @@ async def _process_job(job: ThumbnailJob, storage: StorageBackend) -> None:
     from sqlalchemy import select
 
     from app.db.database import AsyncSessionLocal
-    from app.db.redis import redis_manager
     from app.models.upload import Upload
 
     logger.info("Thumbnail worker: processing hash_id='%s'", job.hash_id)

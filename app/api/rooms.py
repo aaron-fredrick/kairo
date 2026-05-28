@@ -1,4 +1,3 @@
-import time
 from typing import List, Optional
 from datetime import datetime
 
@@ -7,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.jwt import get_current_username, get_current_user_payload
-from app.auth.dependencies import get_current_user, require_admin_or_moderator
+from app.auth.dependencies import require_admin_or_moderator
 from app.core.logging import get_logger
 from app.db.database import get_db
 from app.models.room import Room
@@ -162,7 +161,8 @@ async def get_room_messages(
         )
 
         def _get_pfp_urls(user) -> Optional[dict]:
-            if not user.pfp_hash: return None
+            if not user.pfp_hash:
+                return None
             return {
                 "128": f"/pfps/{user.pfp_hash}_128.webp",
                 "512": f"/pfps/{user.pfp_hash}_512.webp",

@@ -19,7 +19,7 @@ from app.models.attachment import Attachment
 from app.models.upload import Upload
 from app.services.thumbnail_service import THUMBNAIL_SIZES, thumbnail_url
 from app.storage.blob_manager import BlobResult, blob_manager
-from app.workers.thumbnail import ThumbnailJob, thumbnail_queue
+from app.workers.thumbnail import ThumbnailJob
 
 logger = get_logger(__name__)
 

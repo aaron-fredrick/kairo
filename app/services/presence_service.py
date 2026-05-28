@@ -1,5 +1,5 @@
 import redis.asyncio as aioredis
-from typing import List, Set
+from typing import List
 
 class PresenceService:
     async def set_user_online(self, redis: aioredis.Redis, username: str, room_id: int) -> None:

@@ -183,8 +183,6 @@ async def websocket_endpoint(
             event_data["role"] = role
             
             # Fetch sender_pfp_urls
-            from sqlalchemy import select
-            from app.models.user import User
             async with AsyncSessionLocal() as session:
                 user_res = await session.execute(select(User).where(User.username == username))
                 user = user_res.scalars().first()

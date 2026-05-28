@@ -1,7 +1,6 @@
 from datetime import datetime
 from sqlalchemy import DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column
-from app.db.database import Base
 
 class TimestampMixin:
     """Mixin to add created_at and updated_at timestamps to SQLAlchemy models."""

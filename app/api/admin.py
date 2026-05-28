@@ -101,10 +101,10 @@ async def list_named_users(
     """
     Return all non-anonymous users. Accessible by admins and moderators.
     """
-    from sqlalchemy import select
+    from sqlalchemy import select, false
     from app.models.user import User as UserModel
     result = await db.execute(
-        select(UserModel).where(UserModel.is_anonymous == False)
+        select(UserModel).where(UserModel.is_anonymous == false())
     )
     users = result.scalars().all()
     return [

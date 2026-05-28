@@ -1,6 +1,6 @@
 from sqlalchemy import Text, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 from app.db.database import Base
 from app.models.base import TimestampMixin
 
