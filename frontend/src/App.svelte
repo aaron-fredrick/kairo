@@ -15,6 +15,8 @@
   let userPfpUrls = null;
   let token = null;
   let ws = null;
+  let activeUsers = [];
+  let pingInterval = null;
 
   let isLoadingRooms = true;
   let isLoadingMessages = false;
@@ -81,7 +83,9 @@
     selectedRoomId = roomId;
     messages = [];
     tempMessages = [];
+    activeUsers = [];
     loadMessages(roomId);
+    loadPresence(roomId);
     connectWebSocket(roomId);
   }
 
@@ -108,13 +112,34 @@
     }
   }
 
+  async function loadPresence(roomId) {
+    try {
+      const res = await fetch(`/api/v1/rooms/${roomId}/presence`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        activeUsers = data.users;
+      }
+    } catch (e) {
+      console.error("Failed to load presence", e);
+    }
+  }
+
   // ── WebSocket ───────────────────────────────────────────────────────────────
 
   function connectWebSocket(roomId) {
     if (ws) ws.close();
+    if (pingInterval) clearInterval(pingInterval);
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     ws = new WebSocket(`${protocol}//${window.location.host}/ws/chat/${roomId}?token=${token}`);
     ws.onmessage = handleWebSocketMessage;
+
+    pingInterval = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({event: "ping"}));
+      }
+    }, 30000);
   }
 
   function handleWebSocketMessage(event) {
@@ -144,6 +169,23 @@
         });
         messages = patch(messages);
         tempMessages = patch(tempMessages);
+        
+        activeUsers = activeUsers.map(u => u.username === data.username ? { ...u, pfp_urls: data.pfp_urls } : u);
+        return;
+      }
+
+      if (data.event === 'presence_update') {
+        if (data.action === 'join') {
+          if (!activeUsers.find(u => u.username === data.username)) {
+            activeUsers = [...activeUsers, {
+              username: data.username,
+              role: data.role,
+              pfp_urls: data.pfp_urls
+            }];
+          }
+        } else if (data.action === 'leave') {
+          activeUsers = activeUsers.filter(u => u.username !== data.username);
+        }
         return;
       }
     } catch (e) {
@@ -231,7 +273,10 @@
   // ── Lifecycle ───────────────────────────────────────────────────────────────
 
   onMount(initialize);
-  onDestroy(() => { if (ws) ws.close(); });
+  onDestroy(() => { 
+    if (ws) ws.close(); 
+    if (pingInterval) clearInterval(pingInterval);
+  });
 </script>
 
 <main class="app-layout">
@@ -254,7 +299,9 @@
     {isLoadingMessages}
     {token}
     bind:currentMessage
-    on:send={sendMessage}
+    {isUploading}
+    {activeUsers}
+    on:sendMessage={sendMessage}
   />
 </main>
 

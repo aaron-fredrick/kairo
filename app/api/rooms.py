@@ -12,6 +12,8 @@ from app.db.database import get_db
 from app.models.room import Room
 from app.models.message import Message
 from app.models.user import User
+from app.db.redis import get_redis
+from redis.asyncio import Redis
 
 logger = get_logger(__name__)
 
@@ -111,6 +113,45 @@ async def list_rooms(
         filtered_rooms.append(r)
         
     return [RoomResponse.model_validate(r) for r in filtered_rooms]
+
+
+@router.get("/{room_id}/presence")
+async def get_room_presence(
+    room_id: int,
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
+    current_username: str = Depends(get_current_username),
+) -> dict:
+    usernames = await redis.hkeys(f"room:{room_id}:presence_count")
+    if not usernames:
+        return {"users": []}
+        
+    usernames_decoded = [u.decode('utf-8') if isinstance(u, bytes) else u for u in usernames]
+    
+    from sqlalchemy import select
+    from app.models.user import User
+    
+    result = await db.execute(select(User).where(User.username.in_(usernames_decoded)))
+    users = result.scalars().all()
+    
+    def _get_pfp_urls(user) -> dict | None:
+        if not user.pfp_hash:
+            return None
+        return {
+            "128": f"/pfps/{user.pfp_hash}_128.webp",
+            "512": f"/pfps/{user.pfp_hash}_512.webp",
+            "1024": f"/pfps/{user.pfp_hash}_1024.webp",
+        }
+        
+    presence_list = []
+    for u in users:
+        presence_list.append({
+            "username": u.username,
+            "role": u.role,
+            "pfp_urls": _get_pfp_urls(u)
+        })
+        
+    return {"users": presence_list}
 
 
 @router.get("/{room_id}/messages", response_model=List[MessageResponse])
