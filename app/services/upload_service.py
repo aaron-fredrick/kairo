@@ -96,13 +96,12 @@ async def confirm_upload(
         pass
 
     # 4. Return metadata for WS broadcast
-    base = settings.API_BASE_URL.rstrip("/")
     return {
         "blob_hash": blob.blob_hash,
         "filename": upload.original_filename,
         "mime_type": upload.mime_type,
         "size_bytes": upload.size_bytes,
-        "file_url": f"{base}/uploads/download/{blob.blob_hash}",
+        "file_url": f"/download/{blob.blob_hash}",
         "thumbnails": {
             label: thumbnail_url(blob.blob_hash, label)
             for label in THUMBNAIL_SIZES.keys()

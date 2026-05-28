@@ -62,8 +62,7 @@ def thumbnail_abs_path(blob_hash: str, size_label: str) -> str:
 
 
 def thumbnail_url(blob_hash: str, size_label: str) -> str:
-    base = settings.API_BASE_URL.rstrip("/")
-    return f"{base}/uploads/thumbnails/{blob_hash}?size={size_label}"
+    return f"/thumbnails/{blob_hash}?size={size_label}"
 
 
 # ---------------------------------------------------------------------------
