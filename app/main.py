@@ -101,11 +101,10 @@ app.add_middleware(IPAccessMiddleware)
 app.include_router(api_router)
 app.include_router(ws_router)
 
-# Serve uploads directory — files and thumbnails accessible via HTTP
-uploads_dir = os.path.abspath(settings.UPLOAD_LOCAL_DIR)
-os.makedirs(os.path.join(uploads_dir, "files"), exist_ok=True)
-os.makedirs(os.path.join(uploads_dir, "thumbnails"), exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
+# Data directory setup
+data_dir = os.path.abspath(settings.DATA_DIR)
+os.makedirs(os.path.join(data_dir, "blobs"), exist_ok=True)
+os.makedirs(os.path.join(data_dir, "thumbnails"), exist_ok=True)
 
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 os.makedirs(static_dir, exist_ok=True)

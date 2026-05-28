@@ -40,9 +40,10 @@ frontend/build/
 .env.test.local
 .env.production.local
 
-# Databases & Cache
+# Databases, Cache & Storage
 *.db
 *.sqlite
+data/
 
 # IDEs
 .vscode/

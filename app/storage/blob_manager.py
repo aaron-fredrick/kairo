@@ -13,11 +13,14 @@ file in configurable chunks and passes bytes directly to the provider.
 """
 from __future__ import annotations
 
+import io
+import os
 import hashlib
 from dataclasses import dataclass
 from typing import Literal
 
-from fastapi import UploadFile
+import aiofiles
+from PIL import Image, UnidentifiedImageError
 
 from app.core.config import settings
 from app.core.logging import get_logger
@@ -48,34 +51,55 @@ class BlobManager:
     def __init__(self, provider: StorageProvider) -> None:
         self._provider = provider
 
-    async def create_blob(self, file: UploadFile) -> BlobResult:
+    async def create_blob_from_path(self, file_path: str, mime_type: str = "") -> BlobResult:
         """
-        Stream *file*, compute SHA-256, deduplicate, and persist.
-
-        The file is read in chunks so arbitrarily large uploads never fully
-        materialise in process memory. A second pass through the provider is
-        avoided when the blob already exists (deduplication).
+        Read from *file_path*, strip EXIF if it's an image, compute SHA-256,
+        deduplicate, and persist.
 
         Returns a BlobResult containing the hash, size, and final storage path.
         """
         max_bytes = settings.UPLOAD_MAX_SIZE_MB * 1024 * 1024
-        digest = hashlib.sha256()
-        chunks: list[bytes] = []
-        total = 0
+        file_size = os.path.getsize(file_path)
+        
+        if file_size > max_bytes:
+            raise ValueError(f"Upload exceeds the maximum allowed size of {settings.UPLOAD_MAX_SIZE_MB} MB.")
 
-        while True:
-            chunk = await file.read(_CHUNK_SIZE)
-            if not chunk:
-                break
-            total += len(chunk)
-            if total > max_bytes:
-                raise ValueError(
-                    f"Upload exceeds the maximum allowed size of {settings.UPLOAD_MAX_SIZE_MB} MB."
-                )
-            digest.update(chunk)
-            chunks.append(chunk)
+        # Read the file into memory
+        async with aiofiles.open(file_path, "rb") as fh:
+            data = await fh.read()
 
-        blob_hash = digest.hexdigest()
+        # Strip EXIF for images
+        if mime_type.startswith("image/"):
+            try:
+                # Open with Pillow, which ignores EXIF by default unless requested.
+                # Re-saving strips it.
+                img = Image.open(io.BytesIO(data))
+                
+                # We need to preserve the format if possible, otherwise fallback to PNG (lossless)
+                fmt = img.format or "PNG"
+                if fmt == "JPEG":
+                    # For JPEGs, save with high quality to minimize re-compression loss
+                    buf = io.BytesIO()
+                    img.save(buf, format="JPEG", quality=95)
+                    data = buf.getvalue()
+                elif fmt in ("PNG", "WEBP", "GIF"):
+                    # Lossless formats
+                    buf = io.BytesIO()
+                    img.save(buf, format=fmt)
+                    data = buf.getvalue()
+                else:
+                    # Fallback
+                    buf = io.BytesIO()
+                    img.save(buf, format="PNG")
+                    data = buf.getvalue()
+                    
+                logger.debug("Stripped EXIF from image, new size: %d", len(data))
+            except UnidentifiedImageError:
+                logger.warning("Failed to parse image for EXIF stripping, storing as-is")
+
+        # Now hash the (possibly cleaned) data
+        blob_hash = hashlib.sha256(data).hexdigest()
+        total = len(data)
         logger.debug("BlobManager: computed hash=%s size=%d", blob_hash, total)
 
         if await self._provider.exists(blob_hash):
@@ -87,7 +111,6 @@ class BlobManager:
                 storage_path=f"blobs/sha256/{blob_hash[:2]}/{blob_hash[2:4]}/{blob_hash}",
             )
 
-        data = b"".join(chunks)
         storage_path = await self._provider.put(blob_hash, data)
         logger.info("BlobManager: stored blob hash=%s path=%s", blob_hash, storage_path)
 
@@ -110,11 +133,8 @@ class BlobManager:
 def _build_provider() -> StorageProvider:
     """Construct the configured StorageProvider at import time."""
     backend = settings.UPLOAD_BACKEND.lower()
-    base_dir = settings.UPLOAD_LOCAL_DIR
+    base_dir = settings.DATA_DIR
     if backend in ("local", "s3", "ftp"):
-        # For local and future backends, always use the local provider for the
-        # content-addressed blob layer. S3/FTP back-ends can have their own
-        # StorageProvider implementations added here later.
         return LocalStorageProvider(base_dir)
     return LocalStorageProvider(base_dir)
 

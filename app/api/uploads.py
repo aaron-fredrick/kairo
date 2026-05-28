@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import mimetypes
 import os
+import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
@@ -34,14 +35,13 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.jwt import get_current_username
+from app.auth.jwt import get_current_username, get_current_user_payload
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.db.database import get_db
 from app.models.upload import Upload
 from app.services.thumbnail_service import THUMBNAIL_SIZES
 from app.storage.blob_manager import blob_manager
-from app.workers.thumbnail import ThumbnailJob, thumbnail_queue
 
 logger = get_logger(__name__)
 
@@ -61,15 +61,11 @@ class ThumbnailURLs(BaseModel):
 class UploadResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    blob_hash: str
+    upload_id: str
     original_filename: str
     extension: str
     mime_type: str
     size_bytes: int
-    file_url: str
-    thumbnails: ThumbnailURLs
-    thumbnails_ready: bool
-    status: str  # "stored" | "reused"
 
 
 class UploadStatusResponse(BaseModel):
@@ -105,16 +101,13 @@ def _guess_mime(filename: str) -> str:
 
 
 def _build_response(upload: Upload, blob_status: str) -> UploadResponse:
+    # Deprecated for pre-upload. Used for returning status if needed.
     return UploadResponse(
-        blob_hash=upload.hash_id,
+        upload_id="legacy",
         original_filename=upload.original_filename,
         extension=upload.extension,
         mime_type=upload.mime_type,
         size_bytes=upload.size_bytes,
-        file_url=_file_url(upload.hash_id),
-        thumbnails=_thumbnail_urls(upload.hash_id),
-        thumbnails_ready=upload.thumbnails_ready,
-        status=blob_status,
     )
 
 
@@ -132,78 +125,50 @@ async def upload_file(
     """
     Pre-upload a file before attaching it to a message.
 
-    The file is streamed through the BlobManager which computes its SHA-256
-    on-the-fly and deduplicates it against already-stored blobs. The Upload
-    DB record is created (or re-used if duplicate). A thumbnail job is enqueued
-    in the background, and a 'file_uploaded' WebSocket event is broadcast to
-    the room immediately — before thumbnails are ready.
+    The file is saved to a temporary directory and an `upload_id` is returned.
+    It is NOT hashed or stored as a blob yet.
+    When the user sends the message, the WS router will process the temp file,
+    strip EXIF, hash it, and enqueue thumbnail generation.
 
-    Returns the blob_hash which the client must include when sending the message.
+    Returns the upload_id which the client must include when sending the message.
     """
     original_filename = file.filename or "unknown"
     _, dot_ext = os.path.splitext(original_filename)
     extension = dot_ext.lstrip(".").lower() or "bin"
     mime_type = _guess_mime(original_filename)
 
-    try:
-        blob = await blob_manager.create_blob(file)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=str(exc))
+    upload_id = f"upload_{uuid.uuid4().hex}"
+    temp_dir = settings.TEMP_UPLOAD_DIR
+    os.makedirs(temp_dir, exist_ok=True)
+    temp_path = os.path.join(temp_dir, upload_id)
 
-    # Idempotent DB record — reuse existing if blob was deduplicated.
-    existing_result = await db.execute(select(Upload).where(Upload.hash_id == blob.blob_hash))
-    existing: Optional[Upload] = existing_result.scalars().first()
+    size = 0
+    with open(temp_path, "wb") as f:
+        while True:
+            chunk = await file.read(256 * 1024)
+            if not chunk:
+                break
+            size += len(chunk)
+            f.write(chunk)
 
-    if existing:
-        logger.info("Duplicate upload: hash=%s — returning existing record", blob.blob_hash)
-        return _build_response(existing, blob.status)
+    logger.debug("Temp upload saved: %s (%d bytes)", temp_path, size)
 
-    # Also save via the legacy backend so static file serving still works.
-    from app.storage.backends import storage_backend
-    raw_data = await blob_manager.get_blob(blob.blob_hash)
-    await storage_backend.save(raw_data, f"files/{blob.blob_hash}")
-
-    upload = Upload(
+    return UploadResponse(
+        upload_id=upload_id,
         original_filename=original_filename,
         extension=extension,
         mime_type=mime_type,
-        size_bytes=blob.size_bytes,
-        hash_id=blob.blob_hash,
-        storage_backend=settings.UPLOAD_BACKEND,
-        storage_path=blob.storage_path,
-        file_sha256=blob.blob_hash,
-        thumbnails_ready=False,
-    )
-    db.add(upload)
-    await db.commit()
-    await db.refresh(upload)
-
-    logger.info(
-        "Upload persisted: hash=%s file='%s' backend='%s'",
-        blob.blob_hash, original_filename, settings.UPLOAD_BACKEND,
+        size_bytes=size,
     )
 
-    # Enqueue background thumbnail generation.
-    await thumbnail_queue.put(
-        ThumbnailJob(
-            hash_id=blob.blob_hash,
-            file_data=raw_data,
-            mime_type=mime_type,
-            extension=extension,
-            room_id=room_id,
-        )
-    )
 
-    return _build_response(upload, blob.status)
-
-
-@router.get("/blob/{blob_hash}", response_class=Response)
-async def serve_blob(
+@router.get("/download/{blob_hash}", response_class=Response)
+async def download_blob(
     blob_hash: str,
     db: AsyncSession = Depends(get_db),
-    _username: str = Depends(get_current_username),
+    _payload: dict = Depends(get_current_user_payload),
 ) -> Response:
-    """Serve raw blob bytes. Content-Type is derived from the Upload record."""
+    """Serve raw blob bytes for download. Authentication is required."""
     result = await db.execute(select(Upload).where(Upload.hash_id == blob_hash))
     upload: Optional[Upload] = result.scalars().first()
     if not upload:
@@ -214,7 +179,38 @@ async def serve_blob(
     except FileNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Blob data missing from storage.")
 
-    return Response(content=data, media_type=upload.mime_type)
+    headers = {
+        "Content-Disposition": f'attachment; filename="{upload.original_filename}"'
+    }
+    return Response(content=data, media_type=upload.mime_type, headers=headers)
+
+@router.get("/thumbnails/{blob_hash}", response_class=Response)
+async def serve_thumbnail(
+    blob_hash: str,
+    size: str = "512",
+    db: AsyncSession = Depends(get_db),
+    _payload: dict = Depends(get_current_user_payload),
+) -> Response:
+    """Serve a generated thumbnail image. Authentication is required."""
+    if size not in THUMBNAIL_SIZES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid thumbnail size.")
+        
+    result = await db.execute(select(Upload).where(Upload.hash_id == blob_hash))
+    upload: Optional[Upload] = result.scalars().first()
+    if not upload or not upload.thumbnails_ready:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Thumbnail not found or not ready.")
+
+    from app.services.thumbnail_service import thumbnail_abs_path
+    import aiofiles
+
+    abs_path = thumbnail_abs_path(blob_hash, size)
+    if not os.path.exists(abs_path):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Thumbnail file missing from storage.")
+
+    async with aiofiles.open(abs_path, "rb") as fh:
+        data = await fh.read()
+
+    return Response(content=data, media_type="image/webp")
 
 
 @router.get("/status/{blob_hash}", response_model=UploadStatusResponse)

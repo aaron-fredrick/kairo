@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from app.core.logging import get_logger
-from app.services.thumbnail_service import THUMBNAIL_SIZES, generate_thumbnails
+from app.services.thumbnail_service import THUMBNAIL_SIZES, generate_and_save_thumbnails
 from app.storage.backends import StorageBackend
 
 if TYPE_CHECKING:
@@ -55,18 +55,13 @@ async def _process_job(job: ThumbnailJob, storage: StorageBackend) -> None:
 
     logger.info("Thumbnail worker: processing hash_id='%s'", job.hash_id)
 
-    thumbnails = await generate_thumbnails(job.file_data, job.mime_type, job.extension)
-
-    sha256s: dict[str, str] = {}
-    for label, (thumb_bytes, digest) in thumbnails.items():
-        w, h = THUMBNAIL_SIZES[label]
-        relative_path = f"thumbnails/{job.hash_id}_{w}x{h}.jpeg"
-        await storage.save(thumb_bytes, relative_path)
-        sha256s[label] = digest
-        logger.debug(
-            "Thumbnail worker: saved %s thumbnail for '%s' (%d bytes)",
-            label, job.hash_id, len(thumb_bytes),
-        )
+    # The service now handles saving the thumbnails and returns a map of label -> URL
+    thumbnail_urls = await generate_and_save_thumbnails(
+        blob_hash=job.hash_id,
+        data=job.file_data,
+        mime_type=job.mime_type,
+        extension=job.extension,
+    )
 
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(Upload).where(Upload.hash_id == job.hash_id))
@@ -77,19 +72,11 @@ async def _process_job(job: ThumbnailJob, storage: StorageBackend) -> None:
             return
 
         upload.thumbnails_ready = True
-        upload.thumbnail_sha256_sm = sha256s.get("sm")
-        upload.thumbnail_sha256_md = sha256s.get("md")
-        upload.thumbnail_sha256_lg = sha256s.get("lg")
+        # thumbnail_sha256 fields are no longer strictly tracked in DB for now,
+        # or we could extract them if we wanted, but the DB schema only has sm/md/lg.
         await db.commit()
 
     from app.workers.broadcast import BroadcastJob, broadcast_queue
-    from app.core.config import settings
-
-    thumb_base = settings.UPLOAD_BASE_URL.rstrip("/")
-    thumbnail_urls = {
-        label: f"{thumb_base}/thumbnails/{job.hash_id}_{w}x{h}.jpeg"
-        for label, (w, h) in THUMBNAIL_SIZES.items()
-    }
 
     await broadcast_queue.put(
         BroadcastJob(
@@ -98,11 +85,6 @@ async def _process_job(job: ThumbnailJob, storage: StorageBackend) -> None:
             payload={
                 "hash_id": job.hash_id,
                 "thumbnails": thumbnail_urls,
-                "thumbnail_sha256": {
-                    "sm": sha256s.get("sm"),
-                    "md": sha256s.get("md"),
-                    "lg": sha256s.get("lg"),
-                },
             },
         )
     )

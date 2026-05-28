@@ -130,38 +130,31 @@ async def websocket_endpoint(
             await auth_service.refresh_user_activity(redis_client, username)
             
             content = event_data.get("content")
-            blob_hashes: list[str] | None = event_data.get("blob_hashes")
+            incoming_attachments: list[dict] | None = event_data.get("attachments")
 
-            if content or blob_hashes:
+            if content or incoming_attachments:
                 async with AsyncSessionLocal() as session:
-                    # Resolve attachment metadata first to embed it in the DB record
                     attachments_data = []
-                    if blob_hashes:
-                        from sqlalchemy import select as _select
-                        from app.models.upload import Upload
-                        from app.core.config import settings
-                        from app.services.thumbnail_service import THUMBNAIL_SIZES
-
-                        result = await session.execute(_select(Upload).where(Upload.hash_id.in_(blob_hashes)))
-                        uploads = result.scalars().all()
-                        upload_map = {u.hash_id: u for u in uploads}
-
-                        base = settings.UPLOAD_BASE_URL.rstrip("/")
-                        for h in blob_hashes:
-                            if h in upload_map:
-                                u = upload_map[h]
-                                attachments_data.append({
-                                    "blob_hash": h,
-                                    "filename": u.original_filename,
-                                    "mime_type": u.mime_type,
-                                    "size_bytes": u.size_bytes,
-                                    "file_url": f"{base}/files/{h}",
-                                    "thumbnails": {
-                                        label: f"{base}/thumbnails/{h}_{w}x{h_sz}.jpeg"
-                                        for label, (w, h_sz) in THUMBNAIL_SIZES.items()
-                                    },
-                                    "thumbnails_ready": u.thumbnails_ready,
-                                })
+                    if incoming_attachments:
+                        from app.services.upload_service import confirm_upload
+                        import asyncio
+                        
+                        # Process all pending uploads concurrently to avoid blocking the room for too long
+                        tasks = []
+                        for att in incoming_attachments:
+                            tasks.append(
+                                confirm_upload(
+                                    upload_id=att.get("upload_id", ""),
+                                    original_filename=att.get("filename", ""),
+                                    mime_type=att.get("mime_type", ""),
+                                    size_bytes=att.get("size_bytes", 0),
+                                    room_id=room_id,
+                                    db=session,
+                                )
+                            )
+                        
+                        results = await asyncio.gather(*tasks)
+                        attachments_data = [res for res in results if res]
 
                     message = Message(
                         sender_id=sender_id,

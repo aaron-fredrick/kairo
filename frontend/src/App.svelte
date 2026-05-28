@@ -187,7 +187,12 @@
     ws.send(JSON.stringify({
       content: currentMessage,
       nonce,
-      blob_hashes: attachments.map(a => a.blob_hash),
+      attachments: attachments.map(a => ({
+        upload_id: a.upload_id,
+        filename: a.filename,
+        mime_type: a.mime_type,
+        size_bytes: a.size_bytes
+      })),
     }));
 
     currentMessage = '';

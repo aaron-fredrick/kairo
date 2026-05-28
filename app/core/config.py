@@ -61,11 +61,23 @@ class Settings(BaseSettings):
     REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
     REDIS_URL: str = os.getenv("REDIS_URL", f"redis://{os.getenv('REDIS_HOST', 'localhost')}:{os.getenv('REDIS_PORT', '6379')}/0")
 
-    # Upload / File Storage
+    # Storage paths — everything lives under DATA_DIR
     UPLOAD_BACKEND: str = os.getenv("UPLOAD_BACKEND", "local")   # local | s3 | ftp
-    UPLOAD_LOCAL_DIR: str = os.getenv("UPLOAD_LOCAL_DIR", "uploads")
+    DATA_DIR: str = os.getenv("DATA_DIR", "data")
     UPLOAD_MAX_SIZE_MB: int = int(os.getenv("UPLOAD_MAX_SIZE_MB", "50"))
-    UPLOAD_BASE_URL: str = os.getenv("UPLOAD_BASE_URL", "http://localhost:8000/uploads")
+    API_BASE_URL: str = os.getenv("API_BASE_URL", "http://localhost:8000/api/v1")
+
+    @property
+    def TEMP_UPLOAD_DIR(self) -> str:
+        return os.path.join(self.DATA_DIR, "temp", "uploads")
+
+    @property
+    def BLOB_DIR(self) -> str:
+        return os.path.join(self.DATA_DIR, "blobs")
+
+    @property
+    def THUMBNAIL_DIR(self) -> str:
+        return os.path.join(self.DATA_DIR, "thumbnails")
 
     # S3 Storage (when UPLOAD_BACKEND=s3)
     S3_BUCKET: str = os.getenv("S3_BUCKET", "")

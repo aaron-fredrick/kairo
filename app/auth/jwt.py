@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
 import bcrypt as _bcrypt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from redis.asyncio import Redis
@@ -14,7 +14,7 @@ from app.db.redis import get_redis
 
 logger = get_logger(__name__)
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -64,15 +64,32 @@ def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
 
 
 async def get_current_user_payload(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     redis: Redis = Depends(get_redis),
 ) -> Dict[str, Any]:
     """
     FastAPI dependency that extracts and validates a Bearer token, returning the full payload.
+    Supports both Authorization header and 'token' query parameter.
     """
     from app.services.auth_service import auth_service  # noqa: PLC0415
 
-    token = credentials.credentials
+    token = None
+    if credentials:
+        token = credentials.credentials
+    elif "token" in request.query_params:
+        token = request.query_params["token"]
+    elif "kairo_token" in request.cookies:
+        token = request.cookies["kairo_token"]
+
+    if not token:
+        logger.warning("Request rejected: missing JWT token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     payload = decode_access_token(token)
 
     if not payload:
