@@ -116,14 +116,13 @@ async def websocket_endpoint(
     # Track presence count and broadcast if this is the first connection for the user in this room
     count = await redis_client.hincrby(f"room:{room_id}:presence_count", username, 1)
     if count == 1:
-        async with AsyncSessionLocal() as session:
-            pfp_urls = None
-            if user and user.pfp_hash:
-                pfp_urls = {
-                    "128": f"/pfps/{user.pfp_hash}_128.webp",
-                    "512": f"/pfps/{user.pfp_hash}_512.webp",
-                    "1024": f"/pfps/{user.pfp_hash}_1024.webp",
-                }
+        pfp_urls = None
+        if user.pfp_hash:
+            pfp_urls = {
+                "128": f"/pfps/{user.pfp_hash}_128.webp",
+                "512": f"/pfps/{user.pfp_hash}_512.webp",
+                "1024": f"/pfps/{user.pfp_hash}_1024.webp",
+            }
         from app.core.event_bus import event_bus
         await event_bus.publish(f"room:{room_id}:events", json.dumps({
             "event": "presence_update",

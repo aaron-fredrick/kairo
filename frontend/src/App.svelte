@@ -85,7 +85,6 @@
     tempMessages = [];
     activeUsers = [];
     loadMessages(roomId);
-    loadPresence(roomId);
     connectWebSocket(roomId);
   }
 
@@ -134,6 +133,7 @@
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     ws = new WebSocket(`${protocol}//${window.location.host}/ws/chat/${roomId}?token=${token}`);
     ws.onmessage = handleWebSocketMessage;
+    ws.onopen = () => loadPresence(roomId);
 
     pingInterval = setInterval(() => {
       if (ws.readyState === WebSocket.OPEN) {
