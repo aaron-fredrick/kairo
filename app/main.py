@@ -105,6 +105,7 @@ app.include_router(ws_router)
 data_dir = os.path.abspath(settings.DATA_DIR)
 os.makedirs(os.path.join(data_dir, "blobs"), exist_ok=True)
 os.makedirs(os.path.join(data_dir, "thumbnails"), exist_ok=True)
+os.makedirs(os.path.join(data_dir, "db"), exist_ok=True)
 
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 os.makedirs(static_dir, exist_ok=True)

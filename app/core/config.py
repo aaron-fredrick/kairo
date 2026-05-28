@@ -43,7 +43,7 @@ class Settings(BaseSettings):
 
     # Database Settings
     DB_BACKEND: str = os.getenv("DB_BACKEND", "postgres")  # "sqlite" | "postgres"
-    SQLITE_URL: str = os.getenv("SQLITE_URL", "sqlite+aiosqlite:///./kairo.db")
+    SQLITE_URL: str = os.getenv("SQLITE_URL", "sqlite+aiosqlite:///./data/db/kairo.db")
 
     DB_HOST: str = os.getenv("DB_HOST", "localhost")
     DB_PORT: int = int(os.getenv("DB_PORT", "5432"))

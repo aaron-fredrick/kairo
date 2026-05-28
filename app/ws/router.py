@@ -139,22 +139,19 @@ async def websocket_endpoint(
                         from app.services.upload_service import confirm_upload
                         import asyncio
                         
-                        # Process all pending uploads concurrently to avoid blocking the room for too long
-                        tasks = []
+                        # Process pending uploads sequentially since SQLAlchemy AsyncSession
+                        # cannot be used concurrently by multiple coroutines.
                         for att in incoming_attachments:
-                            tasks.append(
-                                confirm_upload(
-                                    upload_id=att.get("upload_id", ""),
-                                    original_filename=att.get("filename", ""),
-                                    mime_type=att.get("mime_type", ""),
-                                    size_bytes=att.get("size_bytes", 0),
-                                    room_id=room_id,
-                                    db=session,
-                                )
+                            res = await confirm_upload(
+                                upload_id=att.get("upload_id", ""),
+                                original_filename=att.get("filename", ""),
+                                mime_type=att.get("mime_type", ""),
+                                size_bytes=att.get("size_bytes", 0),
+                                room_id=room_id,
+                                db=session,
                             )
-                        
-                        results = await asyncio.gather(*tasks)
-                        attachments_data = [res for res in results if res]
+                            if res:
+                                attachments_data.append(res)
 
                     message = Message(
                         sender_id=sender_id,
