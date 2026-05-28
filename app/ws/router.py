@@ -181,6 +181,21 @@ async def websocket_endpoint(
 
             event_data["sender"] = username
             event_data["role"] = role
+            
+            # Fetch sender_pfp_urls
+            from sqlalchemy import select
+            from app.models.user import User
+            async with AsyncSessionLocal() as session:
+                user_res = await session.execute(select(User).where(User.username == username))
+                user = user_res.scalars().first()
+                if user and user.pfp_hash:
+                    event_data["sender_pfp_urls"] = {
+                        "128": f"/pfps/{user.pfp_hash}_128.webp",
+                        "512": f"/pfps/{user.pfp_hash}_512.webp",
+                        "1024": f"/pfps/{user.pfp_hash}_1024.webp",
+                    }
+                else:
+                    event_data["sender_pfp_urls"] = None
 
             from app.core.event_bus import event_bus
             await event_bus.publish(f"room:{room_id}:events", json.dumps(event_data))

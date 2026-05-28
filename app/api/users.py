@@ -1,5 +1,5 @@
 import time
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -20,6 +20,7 @@ class UserProfileResponse(BaseModel):
     username: str
     role: str
     is_anonymous: bool
+    pfp_urls: Optional[dict] = None
 
     class Config:
         from_attributes = True
@@ -36,11 +37,21 @@ async def get_current_user_profile(
 ) -> UserProfileResponse:
     """Return the profile of the currently authenticated user."""
     logger.debug("Profile requested by '%s'", user.username)
+    import typing
+    pfp_urls = None
+    if user.pfp_hash:
+        pfp_urls = {
+            "128": f"/pfps/{user.pfp_hash}_128.webp",
+            "512": f"/pfps/{user.pfp_hash}_512.webp",
+            "1024": f"/pfps/{user.pfp_hash}_1024.webp",
+        }
+        
     return UserProfileResponse(
         id=user.id,
         username=user.username,
         role=user.role,
         is_anonymous=user.is_anonymous,
+        pfp_urls=pfp_urls,
     )
 
 

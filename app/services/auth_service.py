@@ -131,26 +131,27 @@ class AuthService:
 
         username = await self.generate_unique_username(redis)
         
-        # Insert anonymous user into the database so they have an ID for messages
-        from sqlalchemy.exc import IntegrityError
+        # Insert anonymous user into the database or reuse if expired
         from app.models.user import User, UserRole
+        from sqlalchemy import select
         
-        user = User(
-            username=username,
-            is_anonymous=True,
-            is_superadmin=False,
-            role=UserRole.NORMAL.value
-        )
-        db.add(user)
-        try:
+        result = await db.execute(select(User).where(User.username == username))
+        existing_user = result.scalars().first()
+        
+        if existing_user:
+            # The username was freed from Redis, so we reuse the DB record
+            # but reset their profile picture
+            existing_user.pfp_hash = None
             await db.commit()
-            await db.refresh(user)
-        except IntegrityError:
-            await db.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Could not generate a unique username, please try again."
+        else:
+            user = User(
+                username=username,
+                is_anonymous=True,
+                is_superadmin=False,
+                role=UserRole.NORMAL.value
             )
+            db.add(user)
+            await db.commit()
 
         expire_time = int(time.time()) + (settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
         await redis.zadd("active_users", {username: expire_time})

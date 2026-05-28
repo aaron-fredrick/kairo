@@ -3,7 +3,7 @@
   import Sidebar from './lib/Sidebar.svelte';
   import ChatPanel from './lib/ChatPanel.svelte';
   import { getCookie, setCookie } from './lib/cookies.js';
-  import { joinServer, fetchRooms, fetchMessages } from './lib/api.js';
+  import { joinServer, fetchRooms, fetchMessages, fetchMe } from './lib/api.js';
 
   let rooms = [];
   let selectedRoomId = null;
@@ -11,6 +11,8 @@
   let tempMessages = [];
   let currentMessage = '';
   let username = 'Guest';
+  let userRole = 'normal';
+  let userPfpUrls = null;
   let token = null;
   let ws = null;
 
@@ -53,6 +55,15 @@
 
       if (roomsRes.ok) {
         rooms = await roomsRes.json();
+        
+        try {
+          const meData = await fetchMe(token);
+          userPfpUrls = meData.pfp_urls;
+          userRole = meData.role;
+        } catch (e) {
+          console.warn("Could not fetch user profile", e);
+        }
+
         const publicRoom = rooms.find(r => r.name === 'public');
         selectRoom(publicRoom ? publicRoom.id : rooms[0]?.id);
       }
@@ -118,6 +129,22 @@
         handleThumbnailsReady(data);
         return;
       }
+      
+      if (data.event === 'pfp_updated') {
+        if (data.username === username) {
+          userPfpUrls = data.pfp_urls;
+        }
+        // Patch messages where sender === data.username
+        const patch = (list) => list.map(m => {
+          if (m.sender === data.username || m.sender_username === data.username) {
+            return { ...m, sender_pfp_urls: data.pfp_urls };
+          }
+          return m;
+        });
+        messages = patch(messages);
+        tempMessages = patch(tempMessages);
+        return;
+      }
     } catch (e) {
       console.error(e);
     }
@@ -135,6 +162,7 @@
       messages = [...messages, {
         id: data.id,
         sender: data.sender,
+        sender_pfp_urls: data.sender_pfp_urls,
         content: data.content,
         time: new Date(data.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         loading: false,
@@ -177,6 +205,7 @@
       id: nonce,
       nonce,
       sender: username,
+      sender_pfp_urls: userPfpUrls,
       content: currentMessage,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       loading: true,
@@ -209,6 +238,9 @@
     {rooms}
     {selectedRoomId}
     {username}
+    {userRole}
+    {userPfpUrls}
+    {token}
     {isLoadingRooms}
     on:selectRoom={(e) => selectRoom(e.detail)}
   />
