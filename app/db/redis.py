@@ -6,6 +6,7 @@ class MockRedis:
     """In-memory mock for Redis when USE_REDIS is False."""
     def __init__(self):
         self._zsets: Dict[str, Dict[str, float]] = {}
+        self._hashes: Dict[str, Dict[str, int]] = {}
 
     async def close(self):
         pass
@@ -65,6 +66,31 @@ class MockRedis:
         if num == -1:
             return result[start:]
         return result[start:start+num]
+
+    async def hincrby(self, name: str, key: str, amount: int = 1) -> int:
+        if name not in self._hashes:
+            self._hashes[name] = {}
+        if key not in self._hashes[name]:
+            self._hashes[name][key] = 0
+        self._hashes[name][key] += amount
+        return self._hashes[name][key]
+
+    async def hkeys(self, name: str) -> List[str]:
+        if name not in self._hashes:
+            return []
+        return list(self._hashes[name].keys())
+
+    async def hdel(self, name: str, *keys: str) -> int:
+        if name not in self._hashes:
+            return 0
+        deleted = 0
+        for key in keys:
+            if key in self._hashes[name]:
+                del self._hashes[name][key]
+                deleted += 1
+        if not self._hashes[name]:
+            del self._hashes[name]
+        return deleted
 
 class RedisManager:
     def __init__(self):
