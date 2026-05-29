@@ -283,7 +283,6 @@
     {username}
     {userRole}
     {userPfpUrls}
-    {token}
     {isLoadingRooms}
     on:selectRoom={(e) => selectRoom(e.detail)}
   />
@@ -294,7 +293,6 @@
     {allMessages}
     {username}
     {isLoadingMessages}
-    {token}
     bind:currentMessage
     {activeUsers}
     on:send={sendMessage}
