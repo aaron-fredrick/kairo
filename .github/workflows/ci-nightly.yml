@@ -153,25 +153,8 @@ jobs:
           pytest -m e2e --junitxml=junit-e2e.xml -v
           pytest -m regression --junitxml=junit-regression.xml -v || true
           pytest -m "functional or contract or acceptance" --junitxml=junit-extended.xml -v || true
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: test-results
-          path: |
-            junit-*.xml
-            coverage.xml
-
-  codecov:
-    name: Codecov Test Results
-    runs-on: ubuntu-latest
-    needs: test
-    if: success()
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: test-results
       - name: Upload test results to Codecov
+        if: success()
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}

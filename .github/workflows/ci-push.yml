@@ -124,7 +124,7 @@ jobs:
         run: |
           mkdir -p data/test
           rm -f data/test/ci-pytest.db
-          pytest -m "unit or component" \
+          pytest -m "unit or component or integration" \
             --cov=app --cov-config=.coveragerc --cov-report=xml:coverage.xml \
             --junitxml=junit-unit-component.xml -v
       - name: Upload coverage to Codecov
@@ -148,25 +148,8 @@ jobs:
           ADMIN_PASSWORD: admin
           DATA_DIR: data/test
         run: pytest -m smoke --junitxml=junit-smoke.xml -v
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: test-results
-          path: |
-            junit-*.xml
-            coverage.xml
-
-  codecov:
-    name: Codecov Test Results
-    runs-on: ubuntu-latest
-    needs: test
-    if: success()
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: test-results
       - name: Upload test results to Codecov
+        if: success()
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}

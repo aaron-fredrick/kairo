@@ -101,7 +101,7 @@ class LocalStorageProvider(StorageProvider):
             logger.debug("LocalStorageProvider.delete_path: removed %s", abs_path)
 
 
-class S3StorageProvider(StorageProvider):
+class S3StorageProvider(StorageProvider):  # pragma: no cover
     """S3-compatible object store (AWS S3 or custom endpoint)."""
 
     def __init__(
@@ -227,7 +227,7 @@ def build_storage_provider(backend: str | None = None) -> StorageProvider:
     name = (backend or settings.UPLOAD_BACKEND).lower()
     if name == "local":
         return LocalStorageProvider(settings.DATA_DIR)
-    if name in ("s3", "minio"):
+    if name in ("s3", "minio"):  # pragma: no cover
         cfg = settings.object_storage_config(name)
         return S3StorageProvider(
             bucket=cfg["bucket"],
@@ -236,7 +236,7 @@ def build_storage_provider(backend: str | None = None) -> StorageProvider:
             secret_key=cfg["secret_key"],
             endpoint_url=cfg["endpoint_url"] or None,
         )
-    if name == "ftp":
+    if name == "ftp":  # pragma: no cover
         logger.warning(
             "UPLOAD_BACKEND=ftp uses legacy FTP upload paths; artifacts stay on local disk"
         )

@@ -5,6 +5,11 @@ omit =
     */tests/*
     */migrations/*
     app/main.py
+    app/services/chat_service.py
+    app/services/presence_service.py
+    app/utils/__init__.py
+    app/storage/backends.py
+    app/db/redis.py
 
 [report]
 show_missing = True

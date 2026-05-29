@@ -57,11 +57,15 @@ def _init_test_database():
     from app.services.admin_service import admin_service
 
     async def _setup():
+        await engine.dispose()
         db_path = _resolve_sqlite_path()
         if db_path is not None:
             db_path.parent.mkdir(parents=True, exist_ok=True)
             if db_path.exists():
-                db_path.unlink()
+                try:
+                    db_path.unlink()
+                except OSError:
+                    pass
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         async with AsyncSessionLocal() as session:

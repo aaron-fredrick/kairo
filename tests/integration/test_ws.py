@@ -7,9 +7,11 @@ def test_websocket_connection(client):
     with client.websocket_connect(f"/ws/chat/1?token={token}") as websocket:
         websocket.send_json({"event": "message", "content": "test message"})
 
-        data = websocket.receive_json()
-        if data.get("event") == "presence_update":
+        data = None
+        for _ in range(8):
             data = websocket.receive_json()
-
+            if data.get("event") == "new_message":
+                break
+        assert data is not None
         assert data["event"] == "new_message"
         assert data["content"] == "test message"
