@@ -67,6 +67,8 @@ class Settings(BaseSettings):
     UPLOAD_MAX_SIZE_MB: int = int(os.getenv("UPLOAD_MAX_SIZE_MB", "50"))
     API_BASE_URL: str = os.getenv("API_BASE_URL", "http://localhost:8000/api")
 
+    # Legacy filesystem hints (local backend mirrors these under DATA_DIR).
+    # All artifacts use StorageProvider paths — see app.storage.paths.
     @property
     def TEMP_UPLOAD_DIR(self) -> str:
         return os.path.join(self.DATA_DIR, "temp", "uploads")

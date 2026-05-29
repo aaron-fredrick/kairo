@@ -1,9 +1,5 @@
 """
 Upload lifecycle service.
-
-confirm_upload is called from the WebSocket router after a message is saved.
-It finalises the staged temp file into a permanent blob and creates an
-Attachment row linking the blob to the message.
 """
 from __future__ import annotations
 
@@ -19,6 +15,8 @@ from app.models.attachment import Attachment
 from app.models.upload import Upload
 from app.services.thumbnail_service import THUMBNAIL_SIZES, thumbnail_url
 from app.storage.blob_manager import BlobResult, blob_manager
+from app.storage.paths import temp_upload_path
+from app.storage.provider import get_storage_provider
 from app.workers.thumbnail import ThumbnailJob
 
 logger = get_logger(__name__)
@@ -33,20 +31,9 @@ async def confirm_upload(
     room_id: int,
     db: AsyncSession,
 ) -> Tuple[Optional[dict], Optional[ThumbnailJob]]:
-    """
-    Finalises a staged temp upload:
-    1. Reads the temp file, strips EXIF, and hashes via BlobManager.
-    2. Creates (or reuses) the Upload blob record.
-    3. Creates an Attachment row linking the blob to the message.
-    4. Enqueues thumbnail generation if the blob is new.
-    5. Deletes the temp file.
-
-    Returns a tuple containing:
-    1. A serialisable attachment dict for the WebSocket broadcast, or None if the temp file is missing.
-    2. A ThumbnailJob to be enqueued AFTER the message broadcast, or None.
-    """
-    temp_path = os.path.join(settings.TEMP_UPLOAD_DIR, upload_id)
-    if not os.path.exists(temp_path):
+    provider = get_storage_provider()
+    rel = temp_upload_path(upload_id)
+    if not await provider.exists_path(rel):
         logger.warning("Temp upload %s not found — skipping.", upload_id)
         return None, None
 
@@ -54,14 +41,13 @@ async def confirm_upload(
     extension = dot_ext.lstrip(".").lower() or "bin"
     mime_type = mime_type or "application/octet-stream"
 
-    # 1. Ingest blob (EXIF-stripped, content-addressed)
     try:
-        blob: BlobResult = await blob_manager.create_blob_from_path(temp_path, mime_type=mime_type)
+        data = await provider.get_path(rel)
+        blob: BlobResult = await blob_manager.create_blob_from_bytes(data, mime_type=mime_type)
     except ValueError as e:
         logger.error("Upload size exceeded: %s", e)
         return None, None
 
-    # 2. Find or create the Upload (blob) record
     existing = await db.execute(select(Upload).where(Upload.hash_id == blob.blob_hash))
     upload: Optional[Upload] = existing.scalars().first()
     is_new_blob = upload is None
@@ -79,12 +65,11 @@ async def confirm_upload(
             thumbnails_ready=False,
         )
         db.add(upload)
-        await db.flush()   # obtain upload.id without a full commit
+        await db.flush()
         logger.info("Upload blob persisted: hash=%s", blob.blob_hash)
     else:
         logger.info("Reusing existing blob: hash=%s", blob.blob_hash)
 
-    # 3. Create the Attachment row (filename is message-specific)
     attachment = Attachment(
         message_id=message_id,
         upload_id=upload.id,
@@ -93,7 +78,6 @@ async def confirm_upload(
     db.add(attachment)
     await db.flush()
 
-    # 4. Prepare thumbnail generation job for new blobs only
     job = None
     if is_new_blob:
         raw_data = await blob_manager.get_blob(blob.blob_hash)
@@ -105,11 +89,7 @@ async def confirm_upload(
             room_id=room_id,
         )
 
-    # 5. Cleanup temp file
-    try:
-        os.remove(temp_path)
-    except OSError:
-        pass
+    await provider.delete_path(rel)
 
     return {
         "attachment_id": attachment.id,

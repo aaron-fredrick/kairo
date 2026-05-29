@@ -2,6 +2,7 @@
 Storage provider interface and implementations.
 
 Backends are selected via UPLOAD_BACKEND (local | s3 | minio | ftp).
+All artifacts (blobs, temp uploads, thumbnails, pfps) share one provider.
 """
 from __future__ import annotations
 
@@ -16,86 +17,88 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.storage.paths import normalize_posix_path
 
 logger = get_logger(__name__)
 
 
 class StorageProvider(ABC):
-    """
-    Content-addressed blob storage interface.
-
-    All keys are expected to be SHA-256 hex digests (64 characters).
-    """
+    """Unified object storage for blobs and other artifacts."""
 
     @abstractmethod
+    async def put_path(self, rel_path: str, data: bytes) -> str:
+        """Persist *data* at *rel_path* (POSIX). Returns the stored path."""
+
+    @abstractmethod
+    async def get_path(self, rel_path: str) -> bytes:
+        """Return bytes at *rel_path*. Raises FileNotFoundError if absent."""
+
+    @abstractmethod
+    async def exists_path(self, rel_path: str) -> bool:
+        """Return True if *rel_path* exists."""
+
+    @abstractmethod
+    async def delete_path(self, rel_path: str) -> None:
+        """Remove *rel_path*. No-ops if absent."""
+
     async def put(self, key: str, data: bytes) -> str:
-        """
-        Persist *data* under *key*.
+        """Content-addressed blob write (SHA-256 hex *key*)."""
+        return await self.put_path(_blob_shard_path(key), data)
 
-        Returns the provider-relative path to the stored blob.
-        Implementations MUST be idempotent — writing the same key twice
-        is safe and does not corrupt existing data.
-        """
-
-    @abstractmethod
     async def get(self, key: str) -> bytes:
-        """Return the raw bytes for *key*. Raises FileNotFoundError if absent."""
+        return await self.get_path(_blob_shard_path(key))
 
-    @abstractmethod
     async def exists(self, key: str) -> bool:
-        """Return True if a blob with *key* is already stored."""
+        return await self.exists_path(_blob_shard_path(key))
 
-    @abstractmethod
     async def delete(self, key: str) -> None:
-        """Remove the blob for *key*. No-ops silently if the key is absent."""
+        await self.delete_path(_blob_shard_path(key))
 
 
 def _blob_shard_path(key: str) -> str:
-    """POSIX object key / URL path (always forward slashes)."""
+    """POSIX object key for a content-addressed blob."""
     return f"blobs/sha256/{key[:2]}/{key[2:4]}/{key}"
 
 
 def _local_shard_path(key: str) -> str:
-    """Filesystem-relative path under DATA_DIR."""
+    """Filesystem-relative path under DATA_DIR (local backend only)."""
     return os.path.join("blobs", "sha256", key[:2], key[2:4], key)
 
 
 class LocalStorageProvider(StorageProvider):
-    """
-    Filesystem blob store with SHA-256 content addressing and path sharding.
-
-    All blobs live under *base_dir*; the directory is created on first use.
-    """
+    """Filesystem store under *base_dir*."""
 
     def __init__(self, base_dir: str) -> None:
         self._base_dir = base_dir
 
-    def _abs(self, key: str) -> str:
-        return os.path.join(self._base_dir, _local_shard_path(key))
+    def _abs_path(self, rel_path: str) -> str:
+        parts = normalize_posix_path(rel_path).split("/")
+        return os.path.join(self._base_dir, *parts)
 
-    async def put(self, key: str, data: bytes) -> str:
-        abs_path = self._abs(key)
+    async def put_path(self, rel_path: str, data: bytes) -> str:
+        rel = normalize_posix_path(rel_path)
+        abs_path = self._abs_path(rel)
         os.makedirs(os.path.dirname(abs_path), exist_ok=True)
         async with aiofiles.open(abs_path, "wb") as fh:
             await fh.write(data)
-        logger.debug("LocalStorageProvider.put: wrote %d bytes → %s", len(data), abs_path)
-        return _local_shard_path(key)
+        logger.debug("LocalStorageProvider.put_path: wrote %d bytes → %s", len(data), abs_path)
+        return rel
 
-    async def get(self, key: str) -> bytes:
-        abs_path = self._abs(key)
+    async def get_path(self, rel_path: str) -> bytes:
+        abs_path = self._abs_path(rel_path)
         if not os.path.exists(abs_path):
-            raise FileNotFoundError(f"Blob not found: {key}")
+            raise FileNotFoundError(f"Object not found: {rel_path}")
         async with aiofiles.open(abs_path, "rb") as fh:
             return await fh.read()
 
-    async def exists(self, key: str) -> bool:
-        return os.path.exists(self._abs(key))
+    async def exists_path(self, rel_path: str) -> bool:
+        return os.path.exists(self._abs_path(rel_path))
 
-    async def delete(self, key: str) -> None:
-        abs_path = self._abs(key)
+    async def delete_path(self, rel_path: str) -> None:
+        abs_path = self._abs_path(rel_path)
         if os.path.exists(abs_path):
             os.remove(abs_path)
-            logger.debug("LocalStorageProvider.delete: removed %s", abs_path)
+            logger.debug("LocalStorageProvider.delete_path: removed %s", abs_path)
 
 
 class S3StorageProvider(StorageProvider):
@@ -146,11 +149,11 @@ class S3StorageProvider(StorageProvider):
             self._client.create_bucket(**kwargs)
             logger.info("Created object storage bucket '%s'", self._bucket)
 
-    def _object_key(self, key: str) -> str:
-        return _blob_shard_path(key)
+    def _object_key(self, rel_path: str) -> str:
+        return normalize_posix_path(rel_path)
 
-    async def put(self, key: str, data: bytes) -> str:
-        object_key = self._object_key(key)
+    async def put_path(self, rel_path: str, data: bytes) -> str:
+        object_key = self._object_key(rel_path)
         loop = asyncio.get_event_loop()
         try:
             await loop.run_in_executor(
@@ -162,18 +165,18 @@ class S3StorageProvider(StorageProvider):
                 ),
             )
         except (BotoCoreError, ClientError) as exc:
-            logger.error("S3StorageProvider.put failed for '%s': %s", object_key, exc)
+            logger.error("S3StorageProvider.put_path failed for '%s': %s", object_key, exc)
             raise
         logger.debug(
-            "S3StorageProvider.put: %d bytes → s3://%s/%s",
+            "S3StorageProvider.put_path: %d bytes → s3://%s/%s",
             len(data),
             self._bucket,
             object_key,
         )
         return object_key
 
-    async def get(self, key: str) -> bytes:
-        object_key = self._object_key(key)
+    async def get_path(self, rel_path: str) -> bytes:
+        object_key = self._object_key(rel_path)
         loop = asyncio.get_event_loop()
         try:
             response = await loop.run_in_executor(
@@ -183,11 +186,11 @@ class S3StorageProvider(StorageProvider):
             return response["Body"].read()
         except ClientError as exc:
             if exc.response.get("Error", {}).get("Code") in ("404", "NoSuchKey", "NotFound"):
-                raise FileNotFoundError(f"Blob not found: {key}") from exc
+                raise FileNotFoundError(f"Object not found: {rel_path}") from exc
             raise
 
-    async def exists(self, key: str) -> bool:
-        object_key = self._object_key(key)
+    async def exists_path(self, rel_path: str) -> bool:
+        object_key = self._object_key(rel_path)
         loop = asyncio.get_event_loop()
         try:
             await loop.run_in_executor(
@@ -201,8 +204,8 @@ class S3StorageProvider(StorageProvider):
                 return False
             raise
 
-    async def delete(self, key: str) -> None:
-        object_key = self._object_key(key)
+    async def delete_path(self, rel_path: str) -> None:
+        object_key = self._object_key(rel_path)
         loop = asyncio.get_event_loop()
         try:
             await loop.run_in_executor(
@@ -216,8 +219,11 @@ class S3StorageProvider(StorageProvider):
             raise
 
 
+_provider: StorageProvider | None = None
+
+
 def build_storage_provider(backend: str | None = None) -> StorageProvider:
-    """Factory for content-addressed blob StorageProvider implementations."""
+    """Factory for StorageProvider implementations."""
     name = (backend or settings.UPLOAD_BACKEND).lower()
     if name == "local":
         return LocalStorageProvider(settings.DATA_DIR)
@@ -232,8 +238,17 @@ def build_storage_provider(backend: str | None = None) -> StorageProvider:
         )
     if name == "ftp":
         logger.warning(
-            "UPLOAD_BACKEND=ftp uses legacy FTP upload paths; blobs stay on local disk"
+            "UPLOAD_BACKEND=ftp uses legacy FTP upload paths; artifacts stay on local disk"
         )
         return LocalStorageProvider(settings.DATA_DIR)
     logger.warning("Unknown UPLOAD_BACKEND '%s', falling back to local", name)
     return LocalStorageProvider(settings.DATA_DIR)
+
+
+def get_storage_provider() -> StorageProvider:
+    """Application-wide storage provider singleton."""
+    global _provider
+    if _provider is None:
+        _provider = build_storage_provider()
+        logger.info("Storage backend: %s", settings.UPLOAD_BACKEND.lower())
+    return _provider

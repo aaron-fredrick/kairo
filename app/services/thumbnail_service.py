@@ -1,39 +1,23 @@
 """
 Thumbnail generation service.
 
-Supported inputs:
-  - Images (JPEG, PNG, GIF, WEBP, BMP, TIFF, …) — direct Pillow resize.
-  - PDF — first page rendered via pdf2image (requires poppler on PATH).
-  - DOCX — first embedded image extracted.
-  - Everything else — a generic labelled tile.
-
-Output sizes (longest edge):
-  - 128px   → suffix _128
-  - 512px   → suffix _512
-  - 1024px  → suffix _1024
-
-Output format: WebP (lossless for palette images, quality=85 otherwise).
-Output path:   data/thumbnails/sha256/<2>/<2>/<blob_hash>_<size>.webp
-
-EXIF data is always stripped — no GPS coordinates or device metadata
-are ever persisted in thumbnail output.
+Output path (provider-relative): thumbnails/sha256/<2>/<2>/<blob_hash>_<size>.webp
 """
 from __future__ import annotations
 
 import asyncio
 import hashlib
 import io
-import os
 from typing import Optional, Tuple
 
 from PIL import Image, ImageDraw, ImageFont, UnidentifiedImageError
 
-from app.core.config import settings
 from app.core.logging import get_logger
+from app.storage.paths import thumbnail_path
+from app.storage.provider import get_storage_provider
 
 logger = get_logger(__name__)
 
-# Size label → maximum longest-edge dimension (square bounding box)
 THUMBNAIL_SIZES: dict[str, int] = {
     "128": 128,
     "512": 512,
@@ -45,39 +29,17 @@ PDF_MIME = "application/pdf"
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 
-# ---------------------------------------------------------------------------
-# Path helpers
-# ---------------------------------------------------------------------------
-
-def thumbnail_rel_path(blob_hash: str, size_label: str) -> str:
-    """Return the provider-relative path for a thumbnail."""
-    return os.path.join(
-        "sha256", blob_hash[:2], blob_hash[2:4],
-        f"{blob_hash}_{size_label}.webp",
-    )
-
-
-def thumbnail_abs_path(blob_hash: str, size_label: str) -> str:
-    return os.path.join(settings.THUMBNAIL_DIR, thumbnail_rel_path(blob_hash, size_label))
-
-
 def thumbnail_url(blob_hash: str, size_label: str) -> str:
     return f"/api/data/thumbnails?hash={blob_hash}&size={size_label}"
 
 
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
 def _strip_exif(image: Image.Image) -> Image.Image:
-    """Return a copy of *image* with all EXIF / metadata removed."""
     clean = Image.new(image.mode, image.size)
     clean.putdata(list(image.getdata()))
     return clean
 
 
 def _make_generic_thumbnail(label: str, size: int) -> Image.Image:
-    """Render a simple coloured tile with the file extension label."""
     dim = (size, size)
     img = Image.new("RGB", dim, color=(45, 55, 72))
     draw = ImageDraw.Draw(img)
@@ -138,13 +100,8 @@ def _get_source_image(data: bytes, mime_type: str, extension: str) -> Image.Imag
 
 
 def _generate_webp_thumbnail(source: Image.Image, max_dim: int) -> Tuple[bytes, str]:
-    """
-    Resize *source* to fit within *max_dim* × *max_dim*, strip any residual
-    metadata, and encode as WebP. Returns (webp_bytes, sha256_hex).
-    """
     thumb = source.copy()
     thumb.thumbnail((max_dim, max_dim), Image.LANCZOS)
-    # Strip again in case Pillow re-attached palette/info during resize.
     clean = _strip_exif(thumb)
     buf = io.BytesIO()
     clean.save(buf, format="WEBP", quality=85, method=4)
@@ -152,23 +109,12 @@ def _generate_webp_thumbnail(source: Image.Image, max_dim: int) -> Tuple[bytes, 
     return raw, hashlib.sha256(raw).hexdigest()
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
-
 async def generate_and_save_thumbnails(
     blob_hash: str,
     data: bytes,
     mime_type: str,
     extension: str,
 ) -> dict[str, str]:
-    """
-    Generate thumbnails for all three sizes, persist them to disk, and
-    return a mapping of size_label → public URL.
-
-    This is intentionally self-contained — the worker only needs to call
-    this one function and then broadcast the result.
-    """
     loop = asyncio.get_event_loop()
 
     def _blocking() -> dict[str, Tuple[bytes, str]]:
@@ -179,14 +125,13 @@ async def generate_and_save_thumbnails(
         }
 
     results: dict[str, Tuple[bytes, str]] = await loop.run_in_executor(None, _blocking)
+    provider = get_storage_provider()
 
     urls: dict[str, str] = {}
     for label, (thumb_bytes, _digest) in results.items():
-        abs_path = thumbnail_abs_path(blob_hash, label)
-        os.makedirs(os.path.dirname(abs_path), exist_ok=True)
-        with open(abs_path, "wb") as fh:
-            fh.write(thumb_bytes)
+        rel = thumbnail_path(blob_hash, label)
+        await provider.put_path(rel, thumb_bytes)
         urls[label] = thumbnail_url(blob_hash, label)
-        logger.debug("Thumbnail saved: %s (%d bytes)", abs_path, len(thumb_bytes))
+        logger.debug("Thumbnail saved: %s (%d bytes)", rel, len(thumb_bytes))
 
     return urls

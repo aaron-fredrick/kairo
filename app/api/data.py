@@ -1,12 +1,8 @@
-import os
 import uuid
 import mimetypes
 from typing import Any, Dict, Optional
 
-import aiofiles
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status, Response, Query
-from fastapi.responses import FileResponse
-from PIL import Image
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,12 +14,13 @@ from app.db.database import get_db
 from app.models.attachment import Attachment
 from app.models.upload import Upload
 from app.storage.blob_manager import blob_manager
-from app.services.thumbnail_service import THUMBNAIL_SIZES, thumbnail_abs_path
+from app.services.thumbnail_service import THUMBNAIL_SIZES
+from app.storage.paths import pfp_path, temp_pfp_path, temp_upload_path, thumbnail_path
+from app.storage.provider import get_storage_provider
 
 logger = get_logger(__name__)
-router = APIRouter(prefix="/data",tags=["data"])
+router = APIRouter(prefix="/data", tags=["data"])
 
-# --- Upload file ---
 
 @router.post("/upload/file", status_code=status.HTTP_201_CREATED)
 async def upload_file(
@@ -35,26 +32,28 @@ async def upload_file(
         raise HTTPException(status_code=400, detail="Filename missing")
 
     upload_id = f"upload_{uuid.uuid4().hex}"
-    temp_dir = settings.TEMP_UPLOAD_DIR
-    os.makedirs(temp_dir, exist_ok=True)
-    temp_path = os.path.join(temp_dir, upload_id)
+    provider = get_storage_provider()
+    rel = temp_upload_path(upload_id)
 
+    chunks: list[bytes] = []
     bytes_written = 0
     max_bytes = settings.UPLOAD_MAX_SIZE_MB * 1024 * 1024
 
     try:
-        async with aiofiles.open(temp_path, "wb") as f:
-            while chunk := await file.read(256 * 1024):
-                bytes_written += len(chunk)
-                if bytes_written > max_bytes:
-                    raise HTTPException(
-                        status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                        detail=f"File exceeds max size of {settings.UPLOAD_MAX_SIZE_MB}MB",
-                    )
-                await f.write(chunk)
+        while chunk := await file.read(256 * 1024):
+            bytes_written += len(chunk)
+            if bytes_written > max_bytes:
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail=f"File exceeds max size of {settings.UPLOAD_MAX_SIZE_MB}MB",
+                )
+            chunks.append(chunk)
+        await provider.put_path(rel, b"".join(chunks))
+    except HTTPException:
+        await provider.delete_path(rel)
+        raise
     except Exception as e:
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
+        await provider.delete_path(rel)
         raise HTTPException(status_code=500, detail=str(e))
 
     mime_type = file.content_type
@@ -71,11 +70,6 @@ async def upload_file(
     }
 
 
-# --- Upload PFP ---
-
-TEMP_PFP_DIR = os.path.join(settings.DATA_DIR, "temp", "pfps")
-os.makedirs(TEMP_PFP_DIR, exist_ok=True)
-
 @router.post("/upload/pfp")
 async def upload_pfp(
     file: UploadFile = File(...),
@@ -85,16 +79,16 @@ async def upload_pfp(
         raise HTTPException(status_code=400, detail="File must be an image")
 
     upload_id = str(uuid.uuid4())
-    temp_path = os.path.join(TEMP_PFP_DIR, upload_id)
+    provider = get_storage_provider()
+    rel = temp_pfp_path(upload_id)
 
-    async with aiofiles.open(temp_path, "wb") as f:
-        while chunk := await file.read(1024 * 1024):
-            await f.write(chunk)
+    chunks: list[bytes] = []
+    while chunk := await file.read(1024 * 1024):
+        chunks.append(chunk)
+    await provider.put_path(rel, b"".join(chunks))
 
     return {"pfp_upload_id": upload_id, "filename": file.filename}
 
-
-# --- Download ---
 
 @router.get("/download", response_class=Response)
 async def download_file(
@@ -123,8 +117,6 @@ async def download_file(
     return Response(content=data, media_type=upload.mime_type, headers=headers)
 
 
-# --- Thumbnails ---
-
 @router.get("/thumbnails", response_class=Response)
 async def serve_thumbnail(
     hash: str = Query(...),
@@ -134,37 +126,34 @@ async def serve_thumbnail(
 ) -> Response:
     if size not in THUMBNAIL_SIZES:
         raise HTTPException(status_code=400, detail="Invalid thumbnail size.")
-        
+
     result = await db.execute(select(Upload).where(Upload.hash_id == hash))
     upload: Optional[Upload] = result.scalars().first()
     if not upload or not upload.thumbnails_ready:
         raise HTTPException(status_code=404, detail="Thumbnail not found or not ready.")
 
-    abs_path = thumbnail_abs_path(hash, size)
-    if not os.path.exists(abs_path):
+    provider = get_storage_provider()
+    rel = thumbnail_path(hash, size)
+    try:
+        data = await provider.get_path(rel)
+    except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Thumbnail file missing from storage.")
-
-    async with aiofiles.open(abs_path, "rb") as fh:
-        data = await fh.read()
 
     return Response(content=data, media_type="image/webp")
 
-
-# --- PFP serve (public) ---
-
-PFP_DIR = os.path.join(settings.DATA_DIR, "pfps")
-os.makedirs(PFP_DIR, exist_ok=True)
 
 @router.get("/pfp")
 async def serve_pfp(
     hash: str = Query(...),
     size: str = Query("512"),
-) -> FileResponse:
+) -> Response:
     if size not in ("128", "512", "1024"):
         raise HTTPException(status_code=400, detail="Invalid size")
-        
-    filename = f"{hash}_{size}.webp"
-    path = os.path.join(PFP_DIR, filename)
-    if not os.path.exists(path):
+
+    provider = get_storage_provider()
+    rel = pfp_path(hash, size)
+    try:
+        data = await provider.get_path(rel)
+    except FileNotFoundError:
         raise HTTPException(status_code=404, detail="PFP not found")
-    return FileResponse(path, media_type="image/webp")
+    return Response(content=data, media_type="image/webp")
