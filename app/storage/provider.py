@@ -50,14 +50,13 @@ class StorageProvider(ABC):
         """Remove the blob for *key*. No-ops silently if the key is absent."""
 
 
-def _shard_path(key: str) -> str:
-    """
-    Derive a two-level sharded relative path from a SHA-256 hex digest.
+def _blob_shard_path(key: str) -> str:
+    """POSIX object key / URL path (always forward slashes)."""
+    return f"blobs/sha256/{key[:2]}/{key[2:4]}/{key}"
 
-    Example:
-        key  = "8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4"
-        path = "blobs/sha256/8f/43/8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4"
-    """
+
+def _local_shard_path(key: str) -> str:
+    """Filesystem-relative path under DATA_DIR."""
     return os.path.join("blobs", "sha256", key[:2], key[2:4], key)
 
 
@@ -72,7 +71,7 @@ class LocalStorageProvider(StorageProvider):
         self._base_dir = base_dir
 
     def _abs(self, key: str) -> str:
-        return os.path.join(self._base_dir, _shard_path(key))
+        return os.path.join(self._base_dir, _local_shard_path(key))
 
     async def put(self, key: str, data: bytes) -> str:
         abs_path = self._abs(key)
@@ -80,7 +79,7 @@ class LocalStorageProvider(StorageProvider):
         async with aiofiles.open(abs_path, "wb") as fh:
             await fh.write(data)
         logger.debug("LocalStorageProvider.put: wrote %d bytes → %s", len(data), abs_path)
-        return _shard_path(key)
+        return _local_shard_path(key)
 
     async def get(self, key: str) -> bytes:
         abs_path = self._abs(key)
@@ -129,9 +128,26 @@ class S3StorageProvider(StorageProvider):
                 s3={"addressing_style": "path"},
             )
         self._client = boto3.client("s3", **client_kwargs)
+        self._region = region
+        self.ensure_bucket_exists()
+
+    def ensure_bucket_exists(self) -> None:
+        """Create the bucket if missing (needed for local MinIO without mc init)."""
+        try:
+            self._client.head_bucket(Bucket=self._bucket)
+            logger.debug("Object storage bucket '%s' exists", self._bucket)
+        except ClientError as exc:
+            code = exc.response.get("Error", {}).get("Code", "")
+            if code not in ("404", "NoSuchBucket", "NotFound"):
+                raise
+            kwargs: dict = {"Bucket": self._bucket}
+            if self._region and self._region != "us-east-1":
+                kwargs["CreateBucketConfiguration"] = {"LocationConstraint": self._region}
+            self._client.create_bucket(**kwargs)
+            logger.info("Created object storage bucket '%s'", self._bucket)
 
     def _object_key(self, key: str) -> str:
-        return _shard_path(key)
+        return _blob_shard_path(key)
 
     async def put(self, key: str, data: bytes) -> str:
         object_key = self._object_key(key)
