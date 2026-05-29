@@ -18,7 +18,7 @@ class Upload(Base, TimestampMixin):
 
     # Storage
     hash_id: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
-    storage_backend: Mapped[str] = mapped_column(String(20), nullable=False)  # local | s3 | ftp
+    storage_backend: Mapped[str] = mapped_column(String(20), nullable=False)  # local | s3 | minio | ftp
     storage_path: Mapped[str] = mapped_column(Text, nullable=False)           # backend-relative path
 
     # Integrity hashes

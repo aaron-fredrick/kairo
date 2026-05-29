@@ -1,0 +1,42 @@
+# Same as Caddyfile — copy to Caddyfile if yours was removed
+# Backend-only: FastAPI on :8000 serves API + built frontend
+
+{
+	# auto_https off
+}
+
+(kairo_api) {
+	reverse_proxy 127.0.0.1:8000 {
+		transport http {
+			versions 1.1 2
+		}
+	}
+}
+
+:80 {
+	encode gzip zstd
+
+	handle /api/* {
+		import kairo_api
+	}
+
+	handle /auth/* {
+		import kairo_api
+	}
+
+	handle /ws/* {
+		import kairo_api
+	}
+
+	handle /docs* {
+		import kairo_api
+	}
+
+	handle /openapi.json {
+		import kairo_api
+	}
+
+	handle {
+		import kairo_api
+	}
+}

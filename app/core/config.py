@@ -61,8 +61,8 @@ class Settings(BaseSettings):
     REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
     REDIS_URL: str = os.getenv("REDIS_URL", f"redis://{os.getenv('REDIS_HOST', 'localhost')}:{os.getenv('REDIS_PORT', '6379')}/0")
 
-    # Storage paths — everything lives under DATA_DIR
-    UPLOAD_BACKEND: str = os.getenv("UPLOAD_BACKEND", "local")   # local | s3 | ftp
+    # Object storage — UPLOAD_BACKEND: local | s3 | minio | ftp
+    UPLOAD_BACKEND: str = os.getenv("UPLOAD_BACKEND", "local")
     DATA_DIR: str = os.getenv("DATA_DIR", "data")
     UPLOAD_MAX_SIZE_MB: int = int(os.getenv("UPLOAD_MAX_SIZE_MB", "50"))
     API_BASE_URL: str = os.getenv("API_BASE_URL", "http://localhost:8000/api")
@@ -79,12 +79,19 @@ class Settings(BaseSettings):
     def THUMBNAIL_DIR(self) -> str:
         return os.path.join(self.DATA_DIR, "thumbnails")
 
-    # S3 Storage (when UPLOAD_BACKEND=s3)
+    # AWS S3 (when UPLOAD_BACKEND=s3)
     S3_BUCKET: str = os.getenv("S3_BUCKET", "")
     S3_REGION: str = os.getenv("S3_REGION", "us-east-1")
     S3_ACCESS_KEY: str = os.getenv("S3_ACCESS_KEY", "")
     S3_SECRET_KEY: str = os.getenv("S3_SECRET_KEY", "")
-    S3_ENDPOINT_URL: Optional[str] = os.getenv("S3_ENDPOINT_URL")  # for MinIO etc.
+    S3_ENDPOINT_URL: Optional[str] = os.getenv("S3_ENDPOINT_URL")
+
+    # MinIO (when UPLOAD_BACKEND=minio)
+    MINIO_ENDPOINT: str = os.getenv("MINIO_ENDPOINT", "http://localhost:7000")
+    MINIO_ACCESS_KEY: str = os.getenv("MINIO_ACCESS_KEY", "username")
+    MINIO_SECRET_KEY: str = os.getenv("MINIO_SECRET_KEY", "password")
+    MINIO_BUCKET: str = os.getenv("MINIO_BUCKET", "kairo")
+    MINIO_REGION: str = os.getenv("MINIO_REGION", "us-east-1")
 
     # FTP Storage (when UPLOAD_BACKEND=ftp)
     FTP_HOST: str = os.getenv("FTP_HOST", "localhost")
@@ -92,6 +99,31 @@ class Settings(BaseSettings):
     FTP_USER: str = os.getenv("FTP_USER", "")
     FTP_PASSWORD: str = os.getenv("FTP_PASSWORD", "")
     FTP_REMOTE_DIR: str = os.getenv("FTP_REMOTE_DIR", "/uploads")
+
+    def object_storage_config(self, backend: Optional[str] = None) -> dict[str, str]:
+        """Boto3 settings for s3 or minio backends."""
+        name = (backend or self.UPLOAD_BACKEND).lower()
+        if name == "minio":
+            return {
+                "bucket": self.MINIO_BUCKET,
+                "region": self.MINIO_REGION,
+                "access_key": self.MINIO_ACCESS_KEY,
+                "secret_key": self.MINIO_SECRET_KEY,
+                "endpoint_url": self.MINIO_ENDPOINT,
+            }
+        if name == "s3":
+            return {
+                "bucket": self.S3_BUCKET,
+                "region": self.S3_REGION,
+                "access_key": self.S3_ACCESS_KEY,
+                "secret_key": self.S3_SECRET_KEY,
+                "endpoint_url": self.S3_ENDPOINT_URL or "",
+            }
+        raise ValueError(f"Not an object storage backend: {name}")
+
+    @property
+    def is_object_storage(self) -> bool:
+        return self.UPLOAD_BACKEND.lower() in ("s3", "minio")
 
     # JWT Authentication
     JWT_SECRET: str = os.getenv("JWT_SECRET", "super_secret_jwt_key_change_me_in_production_1234567890")

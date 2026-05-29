@@ -1,22 +1,20 @@
 """
 Storage provider interface and implementations.
 
-This module defines the StorageProvider protocol (put/get/exists/delete)
-and concrete implementations. All blobs are keyed by their content-addressed
-SHA-256 hash and stored with two-level directory sharding:
-
-    blobs/sha256/<first-2-hex>/<next-2-hex>/<full-hash>
-
-This structure limits directory fan-out for filesystems that degrade
-on directories with millions of direct children.
+Backends are selected via UPLOAD_BACKEND (local | s3 | minio | ftp).
 """
 from __future__ import annotations
 
+import asyncio
 import os
 from abc import ABC, abstractmethod
 
 import aiofiles
+import boto3
+from botocore.config import Config
+from botocore.exceptions import BotoCoreError, ClientError
 
+from app.core.config import settings
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -99,3 +97,127 @@ class LocalStorageProvider(StorageProvider):
         if os.path.exists(abs_path):
             os.remove(abs_path)
             logger.debug("LocalStorageProvider.delete: removed %s", abs_path)
+
+
+class S3StorageProvider(StorageProvider):
+    """S3-compatible object store (AWS S3 or custom endpoint)."""
+
+    def __init__(
+        self,
+        *,
+        bucket: str,
+        region: str,
+        access_key: str,
+        secret_key: str,
+        endpoint_url: str | None = None,
+        use_path_style: bool | None = None,
+    ) -> None:
+        if not bucket:
+            raise ValueError("Object storage bucket name is required")
+        self._bucket = bucket
+        path_style = use_path_style if use_path_style is not None else bool(endpoint_url)
+        client_kwargs: dict = {
+            "region_name": region,
+            "aws_access_key_id": access_key,
+            "aws_secret_access_key": secret_key,
+        }
+        if endpoint_url:
+            client_kwargs["endpoint_url"] = endpoint_url
+        if path_style:
+            client_kwargs["config"] = Config(
+                signature_version="s3v4",
+                s3={"addressing_style": "path"},
+            )
+        self._client = boto3.client("s3", **client_kwargs)
+
+    def _object_key(self, key: str) -> str:
+        return _shard_path(key)
+
+    async def put(self, key: str, data: bytes) -> str:
+        object_key = self._object_key(key)
+        loop = asyncio.get_event_loop()
+        try:
+            await loop.run_in_executor(
+                None,
+                lambda: self._client.put_object(
+                    Bucket=self._bucket,
+                    Key=object_key,
+                    Body=data,
+                ),
+            )
+        except (BotoCoreError, ClientError) as exc:
+            logger.error("S3StorageProvider.put failed for '%s': %s", object_key, exc)
+            raise
+        logger.debug(
+            "S3StorageProvider.put: %d bytes → s3://%s/%s",
+            len(data),
+            self._bucket,
+            object_key,
+        )
+        return object_key
+
+    async def get(self, key: str) -> bytes:
+        object_key = self._object_key(key)
+        loop = asyncio.get_event_loop()
+        try:
+            response = await loop.run_in_executor(
+                None,
+                lambda: self._client.get_object(Bucket=self._bucket, Key=object_key),
+            )
+            return response["Body"].read()
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") in ("404", "NoSuchKey", "NotFound"):
+                raise FileNotFoundError(f"Blob not found: {key}") from exc
+            raise
+
+    async def exists(self, key: str) -> bool:
+        object_key = self._object_key(key)
+        loop = asyncio.get_event_loop()
+        try:
+            await loop.run_in_executor(
+                None,
+                lambda: self._client.head_object(Bucket=self._bucket, Key=object_key),
+            )
+            return True
+        except ClientError as exc:
+            code = exc.response.get("Error", {}).get("Code")
+            if code in ("404", "NoSuchKey", "NotFound"):
+                return False
+            raise
+
+    async def delete(self, key: str) -> None:
+        object_key = self._object_key(key)
+        loop = asyncio.get_event_loop()
+        try:
+            await loop.run_in_executor(
+                None,
+                lambda: self._client.delete_object(Bucket=self._bucket, Key=object_key),
+            )
+        except ClientError as exc:
+            code = exc.response.get("Error", {}).get("Code")
+            if code in ("404", "NoSuchKey", "NotFound"):
+                return
+            raise
+
+
+def build_storage_provider(backend: str | None = None) -> StorageProvider:
+    """Factory for content-addressed blob StorageProvider implementations."""
+    name = (backend or settings.UPLOAD_BACKEND).lower()
+    if name == "local":
+        return LocalStorageProvider(settings.DATA_DIR)
+    if name in ("s3", "minio"):
+        cfg = settings.object_storage_config(name)
+        return S3StorageProvider(
+            bucket=cfg["bucket"],
+            region=cfg["region"],
+            access_key=cfg["access_key"],
+            secret_key=cfg["secret_key"],
+            endpoint_url=cfg["endpoint_url"] or None,
+        )
+    if name == "ftp":
+        logger.warning(
+            "UPLOAD_BACKEND=ftp uses legacy FTP upload paths; blobs stay on local disk"
+        )
+        return LocalStorageProvider(settings.DATA_DIR)
+    logger.warning("Unknown UPLOAD_BACKEND '%s', falling back to local", name)
+    return LocalStorageProvider(settings.DATA_DIR)

@@ -1,0 +1,51 @@
+# Vite dev server — only use when `npm run dev` is running in frontend/
+#   copy Caddyfile.dev.example Caddyfile
+#   caddy run --config Caddyfile
+
+{
+	# auto_https off
+}
+
+(kairo_api) {
+	reverse_proxy 127.0.0.1:8000 {
+		transport http {
+			versions 1.1 2
+		}
+	}
+}
+
+:80 {
+	encode gzip zstd
+
+	handle /api/* {
+		import kairo_api
+	}
+
+	handle /auth/* {
+		import kairo_api
+	}
+
+	handle /ws/* {
+		import kairo_api
+	}
+
+	handle /docs* {
+		import kairo_api
+	}
+
+	handle /openapi.json {
+		import kairo_api
+	}
+
+	# UI: prefer Vite; fall back to static build on :8000 when dev server is down
+	handle {
+		reverse_proxy 127.0.0.1:5173 127.0.0.1:8000 {
+			lb_policy first
+			lb_try_duration 5s
+			fail_duration 5s
+			transport http {
+				versions 1.1 2
+			}
+		}
+	}
+}

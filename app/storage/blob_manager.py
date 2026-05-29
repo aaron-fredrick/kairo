@@ -24,7 +24,7 @@ from PIL import Image, UnidentifiedImageError
 
 from app.core.config import settings
 from app.core.logging import get_logger
-from app.storage.provider import LocalStorageProvider, StorageProvider
+from app.storage.provider import StorageProvider, build_storage_provider
 
 logger = get_logger(__name__)
 
@@ -132,11 +132,9 @@ class BlobManager:
 
 def _build_provider() -> StorageProvider:
     """Construct the configured StorageProvider at import time."""
-    backend = settings.UPLOAD_BACKEND.lower()
-    base_dir = settings.DATA_DIR
-    if backend in ("local", "s3", "ftp"):
-        return LocalStorageProvider(base_dir)
-    return LocalStorageProvider(base_dir)
+    provider = build_storage_provider()
+    logger.info("Blob storage backend: %s", settings.UPLOAD_BACKEND.lower())
+    return provider
 
 
 # Module-level singleton — shared across the entire application lifetime.

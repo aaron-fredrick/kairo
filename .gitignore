@@ -65,6 +65,8 @@ data/
 *.swp
 *~
 
-# Caddy / Tunnels
+# Caddy / Tunnels (local Caddyfile is gitignored; use Caddyfile.example)
 Caddyfile
+!Caddyfile.example
+!Caddyfile.dev.example
 ngrok.yml
