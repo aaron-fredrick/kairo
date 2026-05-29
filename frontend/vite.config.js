@@ -1,11 +1,20 @@
 import { defineConfig } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
+import { codecovVitePlugin } from '@codecov/vite-plugin'
 import path from 'path'
 import fs from 'fs'
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [svelte()],
+  plugins: [
+    svelte(),
+    // Codecov bundle analysis — after all other plugins (Vite + Svelte, not SvelteKit)
+    codecovVitePlugin({
+      enableBundleAnalysis: process.env.CODECOV_TOKEN !== undefined,
+      bundleName: 'kairo-svelte-bundle',
+      uploadToken: process.env.CODECOV_TOKEN,
+    }),
+  ],
   resolve: {
     alias: {
       '$lib': path.resolve(__dirname, './src/lib'),

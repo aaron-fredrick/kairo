@@ -21,10 +21,19 @@ wheels/
 .installed.cfg
 *.egg
 .pytest_cache/
+tests/.pytest_db/
 .coverage
+.coverage.*
 htmlcov/
+coverage.xml
+coverage-*.xml
+junit-*.xml
 test-report.xml
 pytest_out.txt
+*-results.sarif
+ruff-results.sarif
+bandit-results.sarif
+trivy-results.sarif
 smoke_test*.py
 
 # Node / JS

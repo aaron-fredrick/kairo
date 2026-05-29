@@ -1,1 +1,1 @@
-# Kairo Integration and Unit Test Suite
+# Kairo test suite — organized by category under tests/<category>/

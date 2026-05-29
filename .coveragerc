@@ -1,0 +1,15 @@
+[run]
+source = app
+branch = True
+omit =
+    */tests/*
+    */migrations/*
+    app/main.py
+
+[report]
+show_missing = True
+skip_empty = True
+precision = 2
+
+[xml]
+output = coverage.xml
