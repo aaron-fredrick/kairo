@@ -2,8 +2,8 @@
   import { onMount, onDestroy } from 'svelte';
   import Sidebar from './lib/Sidebar.svelte';
   import ChatPanel from './lib/ChatPanel.svelte';
-  import { getCookie, setCookie } from './lib/cookies.js';
-  import { joinServer, fetchRooms, fetchMessages, fetchUserProfile } from './lib/api.js';
+  import { getCookie } from './lib/cookies.js';
+  import { joinServer, fetchRooms, fetchMessages, fetchUserProfile, fetchPresence } from './lib/api.js';
 
   let rooms = [];
   let selectedRoomId = null;
@@ -27,18 +27,23 @@
 
   // ── Session management ──────────────────────────────────────────────────────
 
+  /**
+   * Called by the API client whenever a silent re-join occurs.
+   * Keeps local state and WS token in sync without a page reload.
+   */
+  function onTokenRefreshed(newToken, newUsername) {
+    token = newToken;
+    username = newUsername;
+  }
+
   async function resolveSession() {
     token = getCookie('kairo_token');
     username = getCookie('kairo_username') || 'Guest';
-    if (!token) await refreshSession();
-  }
-
-  async function refreshSession() {
-    const data = await joinServer();
-    token = data.access_token;
-    username = data.username;
-    setCookie('kairo_token', token);
-    setCookie('kairo_username', username);
+    if (!token) {
+      const data = await joinServer(onTokenRefreshed);
+      token = data.access_token;
+      username = data.username;
+    }
   }
 
   // ── Initialisation ──────────────────────────────────────────────────────────
@@ -48,27 +53,20 @@
     try {
       await resolveSession();
 
-      let roomsRes = await fetchRooms(token);
-      if (roomsRes.status === 401) {
-        setCookie('kairo_token', '', -1);
-        await refreshSession();
-        roomsRes = await fetchRooms(token);
+      const roomsRes = await fetchRooms(onTokenRefreshed);
+      if (!roomsRes.ok) throw new Error(`Failed to load rooms (${roomsRes.status})`);
+      rooms = await roomsRes.json();
+
+      try {
+        const profile = await fetchUserProfile(onTokenRefreshed);
+        userPfpUrls = profile.pfp_urls;
+        userRole = profile.role;
+      } catch (e) {
+        console.warn('Could not fetch user profile', e);
       }
 
-      if (roomsRes.ok) {
-        rooms = await roomsRes.json();
-        
-        try {
-          const profile = await fetchUserProfile(token);
-          userPfpUrls = profile.pfp_urls;
-          userRole = profile.role;
-        } catch (e) {
-          console.warn("Could not fetch user profile", e);
-        }
-
-        const publicRoom = rooms.find(r => r.name === 'public');
-        selectRoom(publicRoom ? publicRoom.id : rooms[0]?.id);
-      }
+      const publicRoom = rooms.find(r => r.name === 'public');
+      selectRoom(publicRoom ? publicRoom.id : rooms[0]?.id);
     } catch (e) {
       console.error(e);
     } finally {
@@ -93,7 +91,7 @@
   async function loadMessages(roomId) {
     isLoadingMessages = true;
     try {
-      const data = await fetchMessages(token, roomId);
+      const data = await fetchMessages(roomId, onTokenRefreshed);
       messages = data.map(m => ({
         id: m.id,
         sender: m.sender_username,
@@ -113,15 +111,13 @@
 
   async function loadPresence(roomId) {
     try {
-      const res = await fetch(`/api/rooms/${roomId}/presence`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await fetchPresence(roomId, onTokenRefreshed);
       if (res.ok) {
         const data = await res.json();
         activeUsers = data.users;
       }
     } catch (e) {
-      console.error("Failed to load presence", e);
+      console.error('Failed to load presence', e);
     }
   }
 
@@ -131,13 +127,14 @@
     if (ws) ws.close();
     if (pingInterval) clearInterval(pingInterval);
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws = new WebSocket(`${protocol}//${window.location.host}/ws/chat/${roomId}?token=${token}`);
+    // Always read token at connection time so a refreshed token is used
+    ws = new WebSocket(`${protocol}//${window.location.host}/ws/chat/${roomId}?token=${getCookie('kairo_token')}`);
     ws.onmessage = handleWebSocketMessage;
     ws.onopen = () => loadPresence(roomId);
 
     pingInterval = setInterval(() => {
       if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({event: "ping"}));
+        ws.send(JSON.stringify({ event: 'ping' }));
       }
     }, 30000);
   }

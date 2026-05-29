@@ -1,12 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.jwt import create_access_token, verify_password
 from app.core.logging import get_logger
-from app.db.database import get_db
 from app.db.database import get_db
 from app.core.state import get_state_manager, StateManager
 from app.models.user import User
