@@ -32,6 +32,7 @@ node_modules/
 frontend/dist/
 frontend/.svelte-kit/
 frontend/build/
+/app/static/
 
 # Local Dev/Environment
 .env
