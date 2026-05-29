@@ -19,7 +19,7 @@ from app.storage.backends import storage_backend
 from app.workers.thumbnail import run_thumbnail_worker
 from app.workers.broadcast import run_broadcast_worker
 from app.ws.router import router as ws_router
-from app.files.router import router as files_router
+from app.api.auth import router as auth_router
 
 logger = get_logger(__name__)
 
@@ -99,9 +99,9 @@ app.add_middleware(
 
 app.add_middleware(IPAccessMiddleware)
 
+app.include_router(auth_router)
 app.include_router(api_router)
 app.include_router(ws_router)
-app.include_router(files_router)
 
 # Data directory setup
 data_dir = os.path.abspath(settings.DATA_DIR)

@@ -3,7 +3,7 @@
   import Sidebar from './lib/Sidebar.svelte';
   import ChatPanel from './lib/ChatPanel.svelte';
   import { getCookie, setCookie } from './lib/cookies.js';
-  import { joinServer, fetchRooms, fetchMessages, fetchMe } from './lib/api.js';
+  import { joinServer, fetchRooms, fetchMessages, fetchUserProfile } from './lib/api.js';
 
   let rooms = [];
   let selectedRoomId = null;
@@ -59,9 +59,9 @@
         rooms = await roomsRes.json();
         
         try {
-          const meData = await fetchMe(token);
-          userPfpUrls = meData.pfp_urls;
-          userRole = meData.role;
+          const profile = await fetchUserProfile(token);
+          userPfpUrls = profile.pfp_urls;
+          userRole = profile.role;
         } catch (e) {
           console.warn("Could not fetch user profile", e);
         }
@@ -113,7 +113,7 @@
 
   async function loadPresence(roomId) {
     try {
-      const res = await fetch(`/api/v1/rooms/${roomId}/presence`, {
+      const res = await fetch(`/api/rooms/${roomId}/presence`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {

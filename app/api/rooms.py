@@ -8,12 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.jwt import get_current_username, get_current_user_payload
 from app.auth.dependencies import require_admin_or_moderator
 from app.core.logging import get_logger
+from app.core.state import get_state_manager, StateManager
 from app.db.database import get_db
 from app.models.room import Room
 from app.models.message import Message
 from app.models.user import User
-from app.db.redis import get_redis
-from redis.asyncio import Redis
 
 logger = get_logger(__name__)
 
@@ -119,14 +118,12 @@ async def list_rooms(
 async def get_room_presence(
     room_id: int,
     db: AsyncSession = Depends(get_db),
-    redis: Redis = Depends(get_redis),
+    state: StateManager = Depends(get_state_manager),
     current_username: str = Depends(get_current_username),
 ) -> dict:
-    usernames = await redis.hkeys(f"room:{room_id}:presence_count")
-    if not usernames:
+    usernames_decoded = await state.get_room_presence_users(room_id)
+    if not usernames_decoded:
         return {"users": []}
-        
-    usernames_decoded = [u.decode('utf-8') if isinstance(u, bytes) else u for u in usernames]
     
     from sqlalchemy import select
     from app.models.user import User
@@ -138,9 +135,9 @@ async def get_room_presence(
         if not user.pfp_hash:
             return None
         return {
-            "128": f"/pfps/{user.pfp_hash}_128.webp",
-            "512": f"/pfps/{user.pfp_hash}_512.webp",
-            "1024": f"/pfps/{user.pfp_hash}_1024.webp",
+            "128": f"/api/data/pfp?hash={user.pfp_hash}&size=128",
+            "512": f"/api/data/pfp?hash={user.pfp_hash}&size=512",
+            "1024": f"/api/data/pfp?hash={user.pfp_hash}&size=1024",
         }
         
     presence_list = []
@@ -193,7 +190,7 @@ async def get_room_messages(
             filename=att.filename,
             mime_type=upload.mime_type,
             size_bytes=upload.size_bytes,
-            file_url=f"/download/{att.id}",
+            file_url=f"/api/data/download?attachment_id={att.id}",
             thumbnails={
                 label: thumbnail_url(upload.hash_id, label)
                 for label in THUMBNAIL_SIZES.keys()
@@ -205,9 +202,9 @@ async def get_room_messages(
         if not user.pfp_hash:
             return None
         return {
-            "128": f"/pfps/{user.pfp_hash}_128.webp",
-            "512": f"/pfps/{user.pfp_hash}_512.webp",
-            "1024": f"/pfps/{user.pfp_hash}_1024.webp",
+            "128": f"/api/data/pfp?hash={user.pfp_hash}&size=128",
+            "512": f"/api/data/pfp?hash={user.pfp_hash}&size=512",
+            "1024": f"/api/data/pfp?hash={user.pfp_hash}&size=1024",
         }
 
     return [

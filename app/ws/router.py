@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.jwt import decode_access_token
 from app.core.logging import get_logger
 from app.db.database import get_db, AsyncSessionLocal
-from app.db.redis import get_redis
+from app.core.state import get_state_manager, StateManager
 from app.models.user import User, UserRole
 from app.models.message import Message
 from app.services.auth_service import auth_service
@@ -51,7 +51,7 @@ async def websocket_endpoint(
     websocket: WebSocket,
     room_id: int,
     token: str = Query(None),
-    redis_client: aioredis.Redis = Depends(get_redis),
+    state: StateManager = Depends(get_state_manager),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """
@@ -78,8 +78,8 @@ async def websocket_endpoint(
     username: str = payload["sub"]
     role: str = payload.get("role", UserRole.NORMAL.value)
 
-    score = await redis_client.zscore("active_users", username)
-    if score is None or score < time.time():
+    is_active = await state.is_user_active(username)
+    if not is_active:
         logger.info("WS rejected (session expired): user='%s' room_id=%d", username, room_id)
         await websocket.close(code=1008)
         return
@@ -110,18 +110,18 @@ async def websocket_endpoint(
         return
 
     await manager.connect(websocket, room_id)
-    await auth_service.refresh_user_activity(redis_client, username)
+    await auth_service.refresh_user_activity(state, username)
     logger.info("WS connected: user='%s' role='%s' room_id=%d host=%s", username, role, room_id, client_host)
 
     # Track presence count and broadcast if this is the first connection for the user in this room
-    count = await redis_client.hincrby(f"room:{room_id}:presence_count", username, 1)
+    count = await state.increment_room_presence(room_id, username, 1)
     if count == 1:
         pfp_urls = None
         if user.pfp_hash:
             pfp_urls = {
-                "128": f"/pfps/{user.pfp_hash}_128.webp",
-                "512": f"/pfps/{user.pfp_hash}_512.webp",
-                "1024": f"/pfps/{user.pfp_hash}_1024.webp",
+                "128": f"/api/data/pfp?hash={user.pfp_hash}&size=128",
+                "512": f"/api/data/pfp?hash={user.pfp_hash}&size=512",
+                "1024": f"/api/data/pfp?hash={user.pfp_hash}&size=1024",
             }
         from app.core.event_bus import event_bus
         await event_bus.publish(f"room:{room_id}:events", json.dumps({
@@ -146,7 +146,7 @@ async def websocket_endpoint(
                 )
                 continue
 
-            await auth_service.refresh_user_activity(redis_client, username)
+            await auth_service.refresh_user_activity(state, username)
             
             content = event_data.get("content")
             incoming_attachments: list[dict] | None = event_data.get("attachments")
@@ -207,9 +207,9 @@ async def websocket_endpoint(
                 user = user_res.scalars().first()
                 if user and user.pfp_hash:
                     event_data["sender_pfp_urls"] = {
-                        "128": f"/pfps/{user.pfp_hash}_128.webp",
-                        "512": f"/pfps/{user.pfp_hash}_512.webp",
-                        "1024": f"/pfps/{user.pfp_hash}_1024.webp",
+                        "128": f"/api/data/pfp?hash={user.pfp_hash}&size=128",
+                        "512": f"/api/data/pfp?hash={user.pfp_hash}&size=512",
+                        "1024": f"/api/data/pfp?hash={user.pfp_hash}&size=1024",
                     }
                 else:
                     event_data["sender_pfp_urls"] = None
@@ -226,16 +226,15 @@ async def websocket_endpoint(
                     await thumbnail_queue.put(job)
 
     except WebSocketDisconnect:
+        pass
+    finally:
         manager.disconnect(websocket, room_id)
-        logger.info("WS disconnected: user='%s' room_id=%d", username, room_id)
-        
-        count = await redis_client.hincrby(f"room:{room_id}:presence_count", username, -1)
+        count = await state.increment_room_presence(room_id, username, -1)
         if count <= 0:
-            await redis_client.hdel(f"room:{room_id}:presence_count", username)
+            await state.remove_room_presence(room_id, username)
             from app.core.event_bus import event_bus
             await event_bus.publish(f"room:{room_id}:events", json.dumps({
                 "event": "presence_update",
                 "action": "leave",
                 "username": username,
             }))
-

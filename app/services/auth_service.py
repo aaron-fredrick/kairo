@@ -4,7 +4,7 @@ import time
 from typing import Optional, Tuple, List
 
 from fastapi import HTTPException, status
-from redis.asyncio import Redis
+from app.core.state import StateManager
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -60,27 +60,26 @@ class AuthService:
             return min(settings.USER_LIMIT, self.total_permutations)
         return self.total_permutations
 
-    async def _cleanup_expired_users(self, redis: Redis) -> None:
+    async def _cleanup_expired_users(self, state: StateManager) -> None:
         """Remove all users whose session score has fallen below the current epoch time."""
         current_time = int(time.time())
-        removed = await redis.zremrangebyscore("active_users", "-inf", current_time)
+        removed = await state.cleanup_inactive_users(current_time)
         if removed:
             logger.debug("Evicted %d expired user session(s) from active_users set", removed)
 
-    async def get_active_users_count(self, redis: Redis) -> int:
+    async def get_active_users_count(self, state: StateManager) -> int:
         """Return the current count of non-expired active users."""
-        await self._cleanup_expired_users(redis)
-        count = await redis.zcard("active_users")
+        count = await state.count_active_users()
         logger.debug("Active user count: %d / %d", count, self.max_users)
         return count
 
-    async def generate_unique_username(self, redis: Redis) -> str:
+    async def generate_unique_username(self, state: StateManager) -> str:
         """
         Randomly sample adjective-noun pairs until a non-active one is found.
 
         Raises HTTP 503 when the server is at capacity or exhausts sampling attempts.
         """
-        active_count = await self.get_active_users_count(redis)
+        active_count = await self.get_active_users_count(state)
 
         if active_count >= self.max_users:
             logger.warning(
@@ -99,8 +98,8 @@ class AuthService:
             noun = random.choice(self.nouns)
             candidate = f"{adj}-{noun}"
 
-            score = await redis.zscore("active_users", candidate)
-            if score is None or score < current_time:
+            is_active = await state.is_user_active(candidate)
+            if not is_active:
                 logger.debug("Username '%s' allocated after %d attempt(s)", candidate, attempt)
                 return candidate
 
@@ -116,7 +115,7 @@ class AuthService:
         )
 
     async def join_server(
-        self, redis: Redis, db: AsyncSession, password: Optional[str] = None
+        self, state: StateManager, db: AsyncSession, password: Optional[str] = None
     ) -> Tuple[str, str]:
         """
         Validate the server password (if set), allocate a username, register it in
@@ -130,7 +129,7 @@ class AuthService:
                     detail="Invalid server password.",
                 )
 
-        username = await self.generate_unique_username(redis)
+        username = await self.generate_unique_username(state)
         
         # Insert anonymous user into the database or reuse if expired
         from app.models.user import User, UserRole
@@ -155,19 +154,19 @@ class AuthService:
             await db.commit()
 
         expire_time = int(time.time()) + (settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
-        await redis.zadd("active_users", {username: expire_time})
+        await state.set_user_active(username, expire_time)
 
         access_token = create_access_token(data={"sub": username, "role": "normal"})
 
         logger.info("New anonymous session started for '%s' (expires at epoch %d)", username, expire_time)
         return username, access_token
 
-    async def refresh_user_activity(self, redis: Redis, username: str) -> None:
+    async def refresh_user_activity(self, state: StateManager, username: str) -> None:
         """Slide the session expiry window forward for an active user."""
-        score = await redis.zscore("active_users", username)
-        if score is not None:
+        is_active = await state.is_user_active(username)
+        if is_active:
             expire_time = int(time.time()) + (settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
-            await redis.zadd("active_users", {username: expire_time})
+            await state.set_user_active(username, expire_time)
             logger.debug("Session refreshed for '%s' (new expiry epoch %d)", username, expire_time)
 
 

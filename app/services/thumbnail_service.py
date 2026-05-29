@@ -62,7 +62,7 @@ def thumbnail_abs_path(blob_hash: str, size_label: str) -> str:
 
 
 def thumbnail_url(blob_hash: str, size_label: str) -> str:
-    return f"/thumbnails/{blob_hash}?size={size_label}"
+    return f"/api/data/thumbnails?hash={blob_hash}&size={size_label}"
 
 
 # ---------------------------------------------------------------------------

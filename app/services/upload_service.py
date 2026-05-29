@@ -117,7 +117,7 @@ async def confirm_upload(
         "filename": attachment.filename,
         "mime_type": upload.mime_type,
         "size_bytes": upload.size_bytes,
-        "file_url": f"/download/{attachment.id}",
+        "file_url": f"/api/data/download?attachment_id={attachment.id}",
         "thumbnails": {
             label: thumbnail_url(blob.blob_hash, label)
             for label in THUMBNAIL_SIZES.keys()

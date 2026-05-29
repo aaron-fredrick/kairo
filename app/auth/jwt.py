@@ -10,7 +10,7 @@ from redis.asyncio import Redis
 
 from app.core.config import settings
 from app.core.logging import get_logger
-from app.db.redis import get_redis
+from app.core.state import get_state_manager, StateManager
 
 logger = get_logger(__name__)
 
@@ -66,7 +66,7 @@ def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
 async def get_current_user_payload(
     request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    redis: Redis = Depends(get_redis),
+    state: StateManager = Depends(get_state_manager),
 ) -> Dict[str, Any]:
     """
     FastAPI dependency that extracts and validates a Bearer token, returning the full payload.
@@ -108,10 +108,9 @@ async def get_current_user_payload(
             detail="Invalid token payload",
         )
 
-    current_time = time.time()
-    score = await redis.zscore("active_users", username)
+    is_active = await state.is_user_active(username)
 
-    if score is None or score < current_time:
+    if not is_active:
         logger.info("Session expired or unknown for user '%s'", username)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -119,7 +118,7 @@ async def get_current_user_payload(
         )
 
     logger.debug("Authenticated request for user '%s'", username)
-    await auth_service.refresh_user_activity(redis, username)
+    await auth_service.refresh_user_activity(state, username)
     return payload
 
 

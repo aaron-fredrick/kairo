@@ -7,7 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.jwt import create_access_token, verify_password
 from app.core.logging import get_logger
 from app.db.database import get_db
-from app.db.redis import get_redis
+from app.db.database import get_db
+from app.core.state import get_state_manager, StateManager
 from app.models.user import User
 from app.services.auth_service import auth_service
 
@@ -35,8 +36,8 @@ class TokenResponse(BaseModel):
 @router.post("/join", response_model=TokenResponse)
 async def join_server(
     request: ServerJoinRequest,
-    redis: Redis = Depends(get_redis),
     db: AsyncSession = Depends(get_db),
+    state: StateManager = Depends(get_state_manager),
 ) -> TokenResponse:
     """
     Assign the caller an adjective-noun username and return a signed JWT.
@@ -44,7 +45,7 @@ async def join_server(
     Optionally validates a server password when the server is password-protected.
     """
     logger.debug("Join request received (password_provided=%s)", request.password is not None)
-    username, access_token = await auth_service.join_server(redis, db, request.password)
+    username, access_token = await auth_service.join_server(state, db, request.password)
     logger.info("Anonymous client joined as '%s'", username)
     return TokenResponse(access_token=access_token, username=username, role="normal")
 
@@ -52,8 +53,8 @@ async def join_server(
 @router.post("/login", response_model=TokenResponse)
 async def login(
     request: LoginRequest,
-    redis: Redis = Depends(get_redis),
     db: AsyncSession = Depends(get_db),
+    state: StateManager = Depends(get_state_manager),
 ) -> TokenResponse:
     """
     Authenticate a named user (admin or moderator) with username + password.
@@ -82,7 +83,7 @@ async def login(
     from app.core.config import settings
 
     expire_time = int(time.time()) + (settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
-    await redis.zadd("active_users", {user.username: expire_time})
+    await state.set_user_active(user.username, expire_time)
 
     access_token = create_access_token(data={"sub": user.username, "role": user.role})
 
