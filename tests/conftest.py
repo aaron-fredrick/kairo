@@ -6,12 +6,12 @@ import pytest
 
 _TEST_DB_DIR = Path(__file__).resolve().parent / ".pytest_db"
 _TEST_DB_DIR.mkdir(parents=True, exist_ok=True)
-_TEST_DB_FILE = _TEST_DB_DIR / "kairo-test.db"
+_DEFAULT_DB_FILE = _TEST_DB_DIR / "kairo-test.db"
 
 os.environ.setdefault("ENV", "test")
 os.environ.setdefault("DEBUG", "false")
 os.environ.setdefault("DB_BACKEND", "sqlite")
-os.environ.setdefault("SQLITE_URL", f"sqlite+aiosqlite:///{_TEST_DB_FILE.as_posix()}")
+os.environ.setdefault("SQLITE_URL", f"sqlite+aiosqlite:///{_DEFAULT_DB_FILE.as_posix()}")
 os.environ.setdefault("EVENT_BUS", "local")
 os.environ.setdefault("JWT_SECRET", "test-jwt-secret-for-ci-only")
 os.environ.setdefault("ADMIN_PASSWORD", "admin")
@@ -36,6 +36,18 @@ _MARKER_BY_DIR = {
 }
 
 
+def _resolve_sqlite_path() -> Path | None:
+    """Return the on-disk SQLite path from SQLITE_URL, or None for :memory:."""
+    url = os.environ.get("SQLITE_URL", "")
+    prefix = "sqlite+aiosqlite:///"
+    if not url.startswith(prefix):
+        return _DEFAULT_DB_FILE
+    path_str = url[len(prefix):]
+    if path_str == ":memory:":
+        return None
+    return Path(path_str)
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _init_test_database():
     """Create schema once per session (file-backed SQLite, shared across connections)."""
@@ -45,8 +57,11 @@ def _init_test_database():
     from app.services.admin_service import admin_service
 
     async def _setup():
-        if _TEST_DB_FILE.exists():
-            _TEST_DB_FILE.unlink()
+        db_path = _resolve_sqlite_path()
+        if db_path is not None:
+            db_path.parent.mkdir(parents=True, exist_ok=True)
+            if db_path.exists():
+                db_path.unlink()
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         async with AsyncSessionLocal() as session:
