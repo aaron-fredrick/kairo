@@ -1,9 +1,7 @@
 import asyncio
 import json
-import time
 from typing import Optional
 
-import redis.asyncio as aioredis
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession

@@ -1,4 +1,3 @@
-import time
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
@@ -6,7 +5,6 @@ import bcrypt as _bcrypt
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
-from redis.asyncio import Redis
 
 from app_backend.core.config import settings
 from app_backend.core.logging import get_logger

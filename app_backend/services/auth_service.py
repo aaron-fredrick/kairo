@@ -90,7 +90,6 @@ class AuthService:
                 detail="Server is full, please try again later.",
             )
 
-        current_time = int(time.time())
         max_attempts = 100
 
         for attempt in range(1, max_attempts + 1):
