@@ -103,12 +103,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - name: Install dependencies
         run: pip install -r requirements.txt
-      - name: Run Pytest
+      - name: Run Pytest (coverage)
         env:
           ENV: test
           DB_BACKEND: sqlite
@@ -126,6 +128,27 @@ jobs:
           pytest -m integration \
             --cov=app --cov-config=.coveragerc --cov-append --cov-report=xml:coverage.xml \
             --junitxml=junit-integration.xml -v
+      - name: Upload coverage to Codecov
+        if: success()
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ${{ github.workspace }}/coverage.xml
+          report_type: coverage
+          disable_search: true
+          flags: backend,tag
+          verbose: true
+          fail_ci_if_error: true
+      - name: Run Pytest (smoke, e2e)
+        env:
+          ENV: test
+          DB_BACKEND: sqlite
+          SQLITE_URL: sqlite+aiosqlite:///./data/test/ci-pytest.db
+          EVENT_BUS: local
+          JWT_SECRET: test-jwt-secret-for-ci-only
+          ADMIN_PASSWORD: admin
+          DATA_DIR: data/test
+        run: |
           pytest -m smoke --junitxml=junit-smoke.xml -v
           pytest -m e2e --junitxml=junit-e2e.xml -v
       - uses: actions/upload-artifact@v4
@@ -137,31 +160,16 @@ jobs:
             coverage.xml
 
   codecov:
-    name: Codecov
+    name: Codecov Test Results
     runs-on: ubuntu-latest
     needs: test
-    if: always() && needs.test.result != 'cancelled'
+    if: success()
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - uses: actions/download-artifact@v4
         with:
           name: test-results
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
-        if: hashFiles('coverage.xml') != ''
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: coverage.xml
-          report_type: coverage
-          disable_search: true
-          flags: backend,tag
-          name: backend-coverage-tag
-          verbose: true
-          fail_ci_if_error: false
       - name: Upload test results to Codecov
-        if: ${{ !cancelled() }}
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
