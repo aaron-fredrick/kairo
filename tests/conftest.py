@@ -81,3 +81,14 @@ def pytest_collection_modifyitems(config, items):
             if dirname in parts:
                 item.add_marker(marker)
                 break
+
+
+@pytest.fixture(scope="session")
+def client():
+    """Single TestClient for the session — avoids duplicate lifespans/workers."""
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    with TestClient(app) as test_client:
+        yield test_client

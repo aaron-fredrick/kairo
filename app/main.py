@@ -55,23 +55,31 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await admin_service.seed_system_rooms(seed_session)
     logger.info("Database seed complete")
 
-    worker_task = asyncio.create_task(run_thumbnail_worker(storage_backend))
-    logger.info("Thumbnail worker spawned")
-    
-    broadcast_task = asyncio.create_task(run_broadcast_worker())
-    logger.info("Broadcast worker spawned")
+    worker_task = None
+    broadcast_task = None
+    if settings.ENV != "test":
+        worker_task = asyncio.create_task(run_thumbnail_worker(storage_backend))
+        logger.info("Thumbnail worker spawned")
+        broadcast_task = asyncio.create_task(run_broadcast_worker())
+        logger.info("Broadcast worker spawned")
 
     yield
 
     logger.info("Shutting down Kairo server")
 
-    worker_task.cancel()
-    broadcast_task.cancel()
-    try:
-        await asyncio.gather(worker_task, broadcast_task, return_exceptions=True)
-    except asyncio.CancelledError:
-        pass
-    logger.debug("Background workers stopped")
+    if worker_task is not None:
+        worker_task.cancel()
+    if broadcast_task is not None:
+        broadcast_task.cancel()
+    if worker_task is not None or broadcast_task is not None:
+        try:
+            await asyncio.gather(
+                *(t for t in (worker_task, broadcast_task) if t is not None),
+                return_exceptions=True,
+            )
+        except asyncio.CancelledError:
+            pass
+        logger.debug("Background workers stopped")
 
     from app.core.event_bus import event_bus
     await event_bus.close()

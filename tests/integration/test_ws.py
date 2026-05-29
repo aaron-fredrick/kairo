@@ -1,11 +1,4 @@
-from fastapi.testclient import TestClient
-
-from app.main import app
-
-client = TestClient(app)
-
-
-def test_websocket_connection():
+def test_websocket_connection(client):
     """Client can connect to a room WebSocket and send a message."""
     res = client.post("/auth/join", json={})
     assert res.status_code == 200

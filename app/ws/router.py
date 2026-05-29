@@ -1,3 +1,4 @@
+import asyncio
 import json
 import time
 from typing import Optional
@@ -124,13 +125,13 @@ async def websocket_endpoint(
                 "1024": f"/api/data/pfp?hash={user.pfp_hash}&size=1024",
             }
         from app.core.event_bus import event_bus
-        await event_bus.publish(f"room:{room_id}:events", json.dumps({
+        asyncio.create_task(event_bus.publish(f"room:{room_id}:events", json.dumps({
             "event": "presence_update",
             "action": "join",
             "username": username,
             "role": role,
             "pfp_urls": pfp_urls,
-        }))
+        })))
 
     try:
         while True:
@@ -233,8 +234,8 @@ async def websocket_endpoint(
         if count <= 0:
             await state.remove_room_presence(room_id, username)
             from app.core.event_bus import event_bus
-            await event_bus.publish(f"room:{room_id}:events", json.dumps({
+            asyncio.create_task(event_bus.publish(f"room:{room_id}:events", json.dumps({
                 "event": "presence_update",
                 "action": "leave",
                 "username": username,
-            }))
+            })))

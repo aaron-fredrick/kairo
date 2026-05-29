@@ -1,11 +1,4 @@
-from fastapi.testclient import TestClient
-
-from app.main import app
-
-client = TestClient(app)
-
-
-def test_guest_login():
+def test_guest_login(client):
     """Auth join returns a token and generated username."""
     response = client.post("/auth/join", json={})
     assert response.status_code == 200
