@@ -5,11 +5,11 @@ from app.main import app
 client = TestClient(app)
 
 
-def test_read_root():
-    """App serves the frontend shell at /."""
-    response = client.get("/")
+def test_openapi_available():
+    """API process is up and serving (no frontend build required)."""
+    response = client.get("/openapi.json")
     assert response.status_code == 200
-    assert "Kairo" in response.text
+    assert response.json()["info"]["title"] == "Kairo API"
 
 
 def test_guest_join_responds():
