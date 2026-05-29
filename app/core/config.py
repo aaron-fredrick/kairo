@@ -65,7 +65,7 @@ class Settings(BaseSettings):
     UPLOAD_BACKEND: str = os.getenv("UPLOAD_BACKEND", "local")   # local | s3 | ftp
     DATA_DIR: str = os.getenv("DATA_DIR", "data")
     UPLOAD_MAX_SIZE_MB: int = int(os.getenv("UPLOAD_MAX_SIZE_MB", "50"))
-    API_BASE_URL: str = os.getenv("API_BASE_URL", "http://localhost:8000/api/v1")
+    API_BASE_URL: str = os.getenv("API_BASE_URL", "http://localhost:8000/api")
 
     @property
     def TEMP_UPLOAD_DIR(self) -> str:

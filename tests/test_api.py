@@ -12,7 +12,7 @@ def test_read_root():
 
 def test_guest_login_placeholder():
     """Test guest login endpoint returns a token response placeholder."""
-    response = client.post("/api/v1/auth/guest")
+    response = client.post("/auth/join", json={})
     assert response.status_code == 200
     json_data = response.json()
     assert "access_token" in json_data
