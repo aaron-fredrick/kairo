@@ -142,19 +142,30 @@ jobs:
     needs: test
     if: always() && needs.test.result != 'cancelled'
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/download-artifact@v4
         with:
           name: test-results
-      - uses: codecov/codecov-action@v5
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
         if: hashFiles('coverage.xml') != ''
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
+          report_type: coverage
+          disable_search: true
           flags: backend,pr
+          name: backend-coverage-pr
+          verbose: true
           fail_ci_if_error: false
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+          report_type: test_results
+          disable_search: true
           files: junit-unit-component.xml,junit-integration.xml,junit-smoke.xml,junit-e2e.xml
+          fail_ci_if_error: false
