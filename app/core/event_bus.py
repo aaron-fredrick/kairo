@@ -26,9 +26,11 @@ class LocalEventBus:
 
     async def publish(self, channel: str, message: str) -> None:
         logger.debug("LocalEventBus: publishing to channel '%s'", channel)
-        if channel in self._subscribers:
-            for handler in self._subscribers[channel]:
-                asyncio.create_task(handler(message))
+        if channel not in self._subscribers:
+            return
+        for handler in self._subscribers[channel]:
+            # Await in-process handlers so TestClient/WS tests receive messages reliably.
+            await handler(message)
 
     async def subscribe(self, channel: str, handler: Callable[[str], Awaitable[None]]) -> None:
         logger.debug("LocalEventBus: subscribing to channel '%s'", channel)
