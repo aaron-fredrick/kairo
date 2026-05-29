@@ -3,9 +3,11 @@ import os
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy import text
 
 from app.api.router import api_router
@@ -102,6 +104,17 @@ app.add_middleware(IPAccessMiddleware)
 app.include_router(auth_router)
 app.include_router(api_router)
 app.include_router(ws_router)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """Return JSON for API/WS paths; serve the 404 page for everything else."""
+    if exc.status_code == 404 and not request.url.path.startswith(("/api", "/ws", "/auth")):
+        four_oh_four = os.path.join(os.path.dirname(__file__), "static", "404.html")
+        if os.path.exists(four_oh_four):
+            with open(four_oh_four, encoding="utf-8") as f:
+                return HTMLResponse(content=f.read(), status_code=404)
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
 # Data directory setup
 data_dir = os.path.abspath(settings.DATA_DIR)
