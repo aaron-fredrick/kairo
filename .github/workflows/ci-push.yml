@@ -76,7 +76,7 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install "bandit[sarif]"
-      - run: bandit -r app/ -f sarif -o bandit-results.sarif
+      - run: bandit -r app_backend/ app_register/ shared/ -f sarif -o bandit-results.sarif
         continue-on-error: true
       - uses: github/codeql-action/upload-sarif@v4
         with:
@@ -124,8 +124,9 @@ jobs:
         run: |
           mkdir -p data/test
           rm -f data/test/ci-pytest.db
-          pytest -m "unit or component or integration" \
-            --cov=app --cov-config=.coveragerc --cov-report=xml:coverage.xml \
+          pytest tests/app_backend tests/app_register tests/shared \
+            -m "unit or component or integration" \
+            --cov=app_backend --cov=app_register --cov-config=.coveragerc --cov-report=xml:coverage.xml \
             --junitxml=junit-unit-component.xml -v
       - name: Upload coverage to Codecov
         if: success()
@@ -147,7 +148,7 @@ jobs:
           JWT_SECRET: test-jwt-secret-for-ci-only
           ADMIN_PASSWORD: admin
           DATA_DIR: data/test
-        run: pytest -m smoke --junitxml=junit-smoke.xml -v
+        run: pytest tests/app_backend -m smoke --junitxml=junit-smoke.xml -v
       - name: Upload test results to Codecov
         if: success()
         uses: codecov/codecov-action@v5

@@ -1,0 +1,143 @@
+import asyncio
+import os
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
+
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from sqlalchemy import text
+
+from app_backend.api.router import api_router
+from app_backend.core.config import settings
+from app_backend.core.logging import get_logger
+from app_backend.core.middleware import IPAccessMiddleware
+from app_backend.db.database import engine, AsyncSessionLocal
+from app_backend.db.redis import redis_manager
+from app_backend.services.admin_service import admin_service
+from app_backend.storage.backends import storage_backend
+from app_backend.workers.thumbnail import run_thumbnail_worker
+from app_backend.workers.broadcast import run_broadcast_worker
+from app_backend.ws.router import router as ws_router
+from app_backend.api.auth import router as auth_router
+from app_backend.clients.register_client import register_client
+
+logger = get_logger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    logger.info("Starting Kairo server (env=%s, debug=%s)", settings.ENV, settings.DEBUG)
+
+    if settings.USE_REDIS:
+        logger.debug("Connecting to Redis at %s", settings.REDIS_URL)
+    else:
+        logger.debug("Using mock in-memory Redis")
+    redis_manager.connect()
+    logger.info("Redis connection established")
+
+    if settings.DB_BACKEND == "sqlite":
+        logger.debug("Verifying SQLite connection at %s", settings.SQLITE_URL)
+        from app_backend.db.database import Base
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+            await conn.execute(text("SELECT 1"))
+        logger.info("SQLite connection ready")
+    else:
+        logger.debug("Verifying PostgreSQL connection at %s", settings.DATABASE_URL)
+        async with engine.begin() as conn:
+            await conn.execute(text("SELECT 1"))
+        logger.info("PostgreSQL connection pool ready")
+
+    async with AsyncSessionLocal() as seed_session:
+        await admin_service.seed_default_admin(seed_session)
+        await admin_service.seed_system_rooms(seed_session)
+    logger.info("Database seed complete")
+
+    worker_task = None
+    broadcast_task = None
+    if settings.ENV != "test":
+        worker_task = asyncio.create_task(run_thumbnail_worker(storage_backend))
+        logger.info("Thumbnail worker spawned")
+        broadcast_task = asyncio.create_task(run_broadcast_worker())
+        logger.info("Broadcast worker spawned")
+
+    if settings.ENV != "test":
+        await register_client.start()
+
+    yield
+
+    logger.info("Shutting down Kairo server")
+
+    await register_client.stop()
+
+    if worker_task is not None:
+        worker_task.cancel()
+    if broadcast_task is not None:
+        broadcast_task.cancel()
+    if worker_task is not None or broadcast_task is not None:
+        try:
+            await asyncio.gather(
+                *(t for t in (worker_task, broadcast_task) if t is not None),
+                return_exceptions=True,
+            )
+        except asyncio.CancelledError:
+            pass
+        logger.debug("Background workers stopped")
+
+    from app_backend.core.event_bus import event_bus
+    await event_bus.close()
+    logger.debug("Event bus closed")
+
+    await redis_manager.disconnect()
+    logger.debug("Redis connection closed")
+
+    await engine.dispose()
+    logger.debug("Database connection pool disposed")
+
+
+app = FastAPI(
+    title="Kairo API",
+    description="Realtime chat communication server",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins_list,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.add_middleware(IPAccessMiddleware)
+
+app.include_router(auth_router)
+app.include_router(api_router)
+app.include_router(ws_router)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """Return JSON for API/WS paths; serve the 404 page for everything else."""
+    if exc.status_code == 404 and not request.url.path.startswith(("/api", "/ws", "/auth")):
+        four_oh_four = os.path.join(os.path.dirname(__file__), "static", "404.html")
+        if os.path.exists(four_oh_four):
+            with open(four_oh_four, encoding="utf-8") as f:
+                return HTMLResponse(content=f.read(), status_code=404)
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+# Data directory setup
+data_dir = os.path.abspath(settings.DATA_DIR)
+os.makedirs(os.path.join(data_dir, "db"), exist_ok=True)
+
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+os.makedirs(static_dir, exist_ok=True)
+app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app_backend.main:app", host="127.0.0.1", port=8000, reload=True, proxy_headers=True)

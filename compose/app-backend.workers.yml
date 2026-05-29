@@ -1,0 +1,36 @@
+# app-backend worker(s) for distributed mode (pair with base + app-register).
+# docker compose -f compose/base.yml -f compose/app-register.yml -f compose/app-backend.workers.yml up --build --scale app-backend=2
+
+services:
+  app-backend:
+    build:
+      context: ..
+      dockerfile: infra/docker/app.Dockerfile
+    restart: unless-stopped
+    environment:
+      ENV: production
+      EVENT_BUS: redis
+      DB_BACKEND: postgres
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-kairo}:${POSTGRES_PASSWORD:-kairo_password}@postgres:5432/${POSTGRES_DB:-kairo}
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:-change_me_in_prod}
+      UPLOAD_BACKEND: minio
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-username}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-password}
+      MINIO_BUCKET: ${MINIO_BUCKET:-kairo}
+      REGISTER_ENABLED: "true"
+      REGISTER_URL: ${REGISTER_URL:-http://app-register:8100}
+      REGISTER_SYSTEM_KEY: ${REGISTER_SYSTEM_KEY:-change_me_register_system_key}
+      REGISTER_INSTANCE_HOST: app-backend
+      REGISTER_INSTANCE_PORT: "8000"
+      REGISTER_INSTANCE_SCHEME: http
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    networks:
+      - kairo

@@ -1,0 +1,43 @@
+# Single app-backend + Caddy on :80 (frontend baked into image).
+# docker compose -f compose/base.yml -f compose/app-backend.local.yml up --build
+
+services:
+  app-backend:
+    build:
+      context: ..
+      dockerfile: infra/docker/app.Dockerfile
+    restart: unless-stopped
+    environment:
+      ENV: production
+      EVENT_BUS: redis
+      DB_BACKEND: postgres
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-kairo}:${POSTGRES_PASSWORD:-kairo_password}@postgres:5432/${POSTGRES_DB:-kairo}
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:-change_me_in_prod}
+      UPLOAD_BACKEND: minio
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-username}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-password}
+      MINIO_BUCKET: ${MINIO_BUCKET:-kairo}
+      REGISTER_ENABLED: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    networks:
+      - kairo
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:80:80"
+    volumes:
+      - ../infra/proxy/caddy/Caddyfile.local:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - app-backend
+    networks:
+      - kairo

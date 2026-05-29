@@ -17,4 +17,4 @@ npm install --legacy-peer-deps
 echo "Compiling static assets..."
 npm run build
 
-echo "Frontend build complete! Static files have been placed in app/static/"
+echo "Frontend build complete! Static files are in app_backend/static/"

@@ -1,0 +1,34 @@
+# Static Caddy — standalone (Docker DNS load-balances scaled `app-backend` tasks)
+{
+	auto_https off
+}
+
+(kairo_api) {
+	reverse_proxy app-backend:8000 {
+		transport http {
+			versions 1.1 2
+		}
+	}
+}
+
+:80 {
+	encode gzip zstd
+	handle /api/* {
+		import kairo_api
+	}
+	handle /auth/* {
+		import kairo_api
+	}
+	handle /ws/* {
+		import kairo_api
+	}
+	handle /docs* {
+		import kairo_api
+	}
+	handle /openapi.json {
+		import kairo_api
+	}
+	handle {
+		import kairo_api
+	}
+}

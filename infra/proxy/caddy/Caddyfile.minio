@@ -1,0 +1,14 @@
+# MinIO profile — API on /, console on /console
+{
+	auto_https off
+}
+
+:80 {
+	handle /console/* {
+		uri strip_prefix /console
+		reverse_proxy minio:9001
+	}
+	handle {
+		reverse_proxy minio:9000
+	}
+}

@@ -1,4 +1,6 @@
-"""Shared test environment — must run before app modules are imported by test files."""
+"""Shared pytest configuration for all packages under tests/."""
+from __future__ import annotations
+
 import os
 from pathlib import Path
 
@@ -17,7 +19,7 @@ os.environ.setdefault("JWT_SECRET", "test-jwt-secret-for-ci-only")
 os.environ.setdefault("ADMIN_PASSWORD", "admin")
 os.environ.setdefault("DATA_DIR", "data/test")
 
-# Folder name under tests/ → pytest marker (see pytest.ini).
+# tests/<package>/<category>/ → pytest markers
 _MARKER_BY_DIR = {
     "unit": pytest.mark.unit,
     "component": pytest.mark.component,
@@ -35,14 +37,20 @@ _MARKER_BY_DIR = {
     "chaos": pytest.mark.chaos,
 }
 
+_PRODUCT_BY_DIR = {
+    "app_backend": pytest.mark.app_backend,
+    "app_register": pytest.mark.app_register,
+    "frontend": pytest.mark.frontend,
+    "shared": pytest.mark.shared,
+}
+
 
 def _resolve_sqlite_path() -> Path | None:
-    """Return the on-disk SQLite path from SQLITE_URL, or None for :memory:."""
     url = os.environ.get("SQLITE_URL", "")
     prefix = "sqlite+aiosqlite:///"
     if not url.startswith(prefix):
         return _DEFAULT_DB_FILE
-    path_str = url[len(prefix):]
+    path_str = url[len(prefix) :]
     if path_str == ":memory:":
         return None
     return Path(path_str)
@@ -50,11 +58,11 @@ def _resolve_sqlite_path() -> Path | None:
 
 @pytest.fixture(scope="session", autouse=True)
 def _init_test_database():
-    """Create schema once per session (file-backed SQLite, shared across connections)."""
+    """Create app-backend schema once per session (SQLite file)."""
     import asyncio
 
-    from app.db.database import AsyncSessionLocal, Base, engine
-    from app.services.admin_service import admin_service
+    from app_backend.db.database import AsyncSessionLocal, Base, engine
+    from app_backend.services.admin_service import admin_service
 
     async def _setup():
         await engine.dispose()
@@ -78,9 +86,13 @@ def _init_test_database():
 
 
 def pytest_collection_modifyitems(config, items):
-    """Apply markers from tests/<category>/ directory layout."""
+    """Apply product + category markers from directory layout."""
     for item in items:
         parts = Path(str(item.fspath)).parts
+        for dirname, marker in _PRODUCT_BY_DIR.items():
+            if dirname in parts:
+                item.add_marker(marker)
+                break
         for dirname, marker in _MARKER_BY_DIR.items():
             if dirname in parts:
                 item.add_marker(marker)
@@ -89,10 +101,10 @@ def pytest_collection_modifyitems(config, items):
 
 @pytest.fixture(scope="session")
 def client():
-    """Single TestClient for the session — avoids duplicate lifespans/workers."""
+    """FastAPI TestClient for app-backend (session-scoped)."""
     from fastapi.testclient import TestClient
 
-    from app.main import app
+    from app_backend.main import app
 
     with TestClient(app) as test_client:
         yield test_client

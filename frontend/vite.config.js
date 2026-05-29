@@ -21,8 +21,8 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: path.resolve(__dirname, '../app/static'),
-    emptyOutDir: true, // Clean the app/static folder before building
+    outDir: path.resolve(__dirname, '../app_backend/static'),
+    emptyOutDir: true, // Clean the app_backend/static folder before building
   },
   server: {
     host: '127.0.0.1', // Force IPv4 to match Caddy reverse proxy

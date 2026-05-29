@@ -1,0 +1,34 @@
+# MinIO + Caddy (isolated object-storage testing).
+# docker compose -f compose/infra.minio.yml up
+
+services:
+  minio:
+    image: minio/minio
+    restart: unless-stopped
+    command: server /data --address ":9000" --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-username}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-password}
+    volumes:
+      - minio_data:/data
+    networks:
+      - kairo
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:7000:80"
+    volumes:
+      - ../infra/proxy/caddy/Caddyfile.minio:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - minio
+    networks:
+      - kairo
+
+networks:
+  kairo:
+    name: kairo
+
+volumes:
+  minio_data:

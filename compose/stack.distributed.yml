@@ -1,0 +1,7 @@
+# Full distributed stack (base + app-register + app-backend workers).
+# docker compose -f compose/stack.distributed.yml up --build --scale app-backend=2
+
+include:
+  - path: base.yml
+  - path: app-register.yml
+  - path: app-backend.workers.yml

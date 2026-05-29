@@ -1,0 +1,32 @@
+# app-register + Caddy (dynamic upstream config).
+# docker compose -f compose/base.yml -f compose/app-register.yml up --build
+
+services:
+  app-register:
+    build:
+      context: ..
+      dockerfile: infra/docker/register.Dockerfile
+    restart: unless-stopped
+    environment:
+      REGISTER_SYSTEM_KEY: ${REGISTER_SYSTEM_KEY:-change_me_register_system_key}
+      PROXY_TYPE: ${PROXY_TYPE:-caddy}
+      PROXY_CONFIG_PATH: /proxy/Caddyfile
+      PROXY_RELOAD_COMMAND: ""
+      PUBLIC_LISTEN: ":80"
+    volumes:
+      - proxy_config:/proxy
+    networks:
+      - kairo
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:80:80"
+    command: caddy run --config /etc/caddy/Caddyfile --watch
+    volumes:
+      - proxy_config:/etc/caddy
+    depends_on:
+      - app-register
+    networks:
+      - kairo

@@ -1,0 +1,73 @@
+# Shared data plane: PostgreSQL, Redis, MinIO (+ bucket init).
+# docker compose -f compose/base.yml -f compose/<profile>.yml up
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-kairo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kairo_password}
+      POSTGRES_DB: ${POSTGRES_DB:-kairo}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kairo}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - kairo
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - kairo
+
+  minio:
+    image: minio/minio
+    restart: unless-stopped
+    command: server /data --address ":9000" --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-username}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-password}
+    volumes:
+      - minio_data:/data
+    networks:
+      - kairo
+
+  minio-init:
+    image: minio/mc
+    depends_on:
+      minio:
+        condition: service_started
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set kairo http://minio:9000 $$MINIO_ACCESS_KEY $$MINIO_SECRET_KEY 2>/dev/null; do sleep 1; done;
+      mc mb kairo/$$MINIO_BUCKET --ignore-existing;
+      exit 0;
+      "
+    environment:
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-username}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-password}
+      MINIO_BUCKET: ${MINIO_BUCKET:-kairo}
+    networks:
+      - kairo
+
+networks:
+  kairo:
+    name: kairo
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  proxy_config:

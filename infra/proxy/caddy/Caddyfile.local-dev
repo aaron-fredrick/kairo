@@ -1,0 +1,40 @@
+# Static Caddy — local-dev (Vite + API backend)
+{
+	auto_https off
+}
+
+:80 {
+	encode gzip zstd
+
+	handle /api/* {
+		reverse_proxy app-backend:8000 {
+			transport http {
+				versions 1.1 2
+			}
+		}
+	}
+	handle /auth/* {
+		reverse_proxy app-backend:8000 {
+			transport http {
+				versions 1.1 2
+			}
+		}
+	}
+	handle /ws/* {
+		reverse_proxy app-backend:8000 {
+			transport http {
+				versions 1.1 2
+			}
+		}
+	}
+	handle /docs* {
+		reverse_proxy app-backend:8000
+	}
+	handle /openapi.json {
+		reverse_proxy app-backend:8000
+	}
+
+	handle {
+		reverse_proxy frontend:5173
+	}
+}
