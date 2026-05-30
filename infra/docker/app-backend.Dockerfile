@@ -1,10 +1,3 @@
-FROM node:20-alpine AS frontend
-WORKDIR /fe
-COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci --legacy-peer-deps 2>/dev/null || npm install --legacy-peer-deps
-COPY frontend/ ./
-RUN npm run build
-
 FROM python:3.11-slim AS builder
 
 WORKDIR /usr/src/app
@@ -19,7 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir --user -r requirements.txt
 
-FROM python:3.11-slim AS runner
+FROM python:3.11-slim AS dev
 
 WORKDIR /usr/src/app
 
@@ -32,7 +25,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /root/.local /root/.local
-COPY --from=frontend /app/static ./app_backend/static
 COPY .env* ./
 COPY ./shared ./shared
 COPY ./app_backend ./app_backend
@@ -41,3 +33,13 @@ COPY ./config ./config
 EXPOSE 8000
 
 CMD ["uvicorn", "app_backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+
+FROM node:20-alpine AS frontend
+WORKDIR /fe
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm ci --legacy-peer-deps 2>/dev/null || npm install --legacy-peer-deps
+COPY frontend/ ./
+RUN npm run build
+
+FROM dev AS runner
+COPY --from=frontend /app_backend/static ./app_backend/static

@@ -3,7 +3,7 @@
 
 services:
   postgres:
-    image: postgres:15-alpine
+    image: postgres:latest
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-kairo}
@@ -20,7 +20,7 @@ services:
       - kairo
 
   redis:
-    image: redis:7-alpine
+    image: redis:latest
     restart: unless-stopped
     volumes:
       - redis_data:/data

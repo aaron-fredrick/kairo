@@ -31,7 +31,7 @@ services:
       - kairo
 
   caddy:
-    image: caddy:2-alpine
+    image: caddy:latest
     restart: unless-stopped
     ports:
       - "0.0.0.0:80:80"

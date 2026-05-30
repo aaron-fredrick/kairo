@@ -5,34 +5,25 @@ services:
   app-backend:
     build:
       context: ..
-      dockerfile: infra/docker/app.Dockerfile
+      dockerfile: infra/docker/app-backend.Dockerfile
+      target: dev
     restart: unless-stopped
     command: >
       uvicorn app_backend.main:app --host 0.0.0.0 --port 8000 --reload --proxy-headers
     volumes:
       - ../app_backend:/usr/src/app/app_backend
       - ../shared:/usr/src/app/shared
+      - ../data:/usr/src/app/data
     environment:
       ENV: development
-      EVENT_BUS: redis
-      DB_BACKEND: postgres
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-kairo}:${POSTGRES_PASSWORD:-kairo_password}@postgres:5432/${POSTGRES_DB:-kairo}
-      REDIS_URL: redis://redis:6379/0
+      EVENT_BUS: local
+      DB_BACKEND: sqlite
+      DATABASE_URL: sqlite+aiosqlite:///data/db/kairo.db
       JWT_SECRET: ${JWT_SECRET:-dev_jwt_secret}
-      UPLOAD_BACKEND: minio
-      MINIO_ENDPOINT: http://minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-username}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-password}
-      MINIO_BUCKET: ${MINIO_BUCKET:-kairo}
+      UPLOAD_BACKEND: local
+      DATA_DIR: data
       REGISTER_ENABLED: "false"
       CORS_ORIGINS: http://localhost,http://127.0.0.1,http://localhost:5173
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      minio-init:
-        condition: service_completed_successfully
     networks:
       - kairo
 
