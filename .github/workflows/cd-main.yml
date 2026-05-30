@@ -1,6 +1,10 @@
 name: CD Main
 'on':
-  push:
+  workflow_run:
+    workflows:
+    - CI Merge (main)
+    types:
+    - completed
     branches:
     - main
 permissions:
@@ -53,3 +57,4 @@ jobs:
         docker save ghcr.io/${{ github.repository }}/kairo-standalone:latest | gzip > kairo-standalone.tar.gz
         docker save ghcr.io/${{ github.repository }}/kairo-local:latest | gzip > kairo-local.tar.gz
         docker save ghcr.io/${{ github.repository }}/kairo-local-dev:latest | gzip > kairo-local-dev.tar.gz
+    if: github.event.workflow_run.conclusion == 'success'
