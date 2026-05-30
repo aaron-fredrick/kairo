@@ -3,35 +3,31 @@
 	auto_https off
 }
 
+(kairo_api) {
+	reverse_proxy app-backend:8000 {
+		transport http {
+			versions 1.1 2
+		}
+	}
+}
+
 :80 {
 	encode gzip zstd
 
 	handle /api/* {
-		reverse_proxy app-backend:8000 {
-			transport http {
-				versions 1.1 2
-			}
-		}
+		import kairo_api
 	}
 	handle /auth/* {
-		reverse_proxy app-backend:8000 {
-			transport http {
-				versions 1.1 2
-			}
-		}
+		import kairo_api
 	}
 	handle /ws/* {
-		reverse_proxy app-backend:8000 {
-			transport http {
-				versions 1.1 2
-			}
-		}
+		import kairo_api
 	}
 	handle /docs* {
-		reverse_proxy app-backend:8000
+		import kairo_api
 	}
 	handle /openapi.json {
-		reverse_proxy app-backend:8000
+		import kairo_api
 	}
 
 	handle {
