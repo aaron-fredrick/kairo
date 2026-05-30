@@ -1,5 +1,5 @@
 # Single app-backend + Caddy on :80 (frontend baked into image).
-# docker compose -f compose/base.yml -f compose/app-backend.local.yml up --build
+# docker compose -f compose/app-backend.local.yml up --build
 
 services:
   app-backend:
@@ -23,7 +23,7 @@ services:
       - kairo
 
   caddy:
-    image: caddy
+    image: caddy:2-alpine
     restart: unless-stopped
     ports:
       - "0.0.0.0:80:80"

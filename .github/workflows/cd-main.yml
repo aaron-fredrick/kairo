@@ -1,0 +1,55 @@
+name: CD Main
+'on':
+  push:
+    branches:
+    - main
+permissions:
+  contents: write
+  security-events: none
+  packages: write
+jobs:
+  cd-publish:
+    name: Publish GHCR Images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build, Tag, and Push Docker Images
+      run: |
+        echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+        # Build images
+        docker build -f infra/docker/app-backend.local.Dockerfile --target runner -t ghcr.io/${{ github.repository }}/kairo-backend:latest .
+        docker build -f infra/docker/app-register.Dockerfile -t ghcr.io/${{ github.repository }}/kairo-register:latest .
+        docker build -f infra/docker/app-backend.local.Dockerfile --target runner -t ghcr.io/${{ github.repository }}/kairo-standalone:latest .
+        docker build -f infra/docker/app-backend.local.Dockerfile --target runner -t ghcr.io/${{ github.repository }}/kairo-local:latest .
+        docker build -f infra/docker/app-backend.local-dev.Dockerfile --target dev -t ghcr.io/${{ github.repository }}/kairo-local-dev:latest .
+
+        # For minio, postgresql, redis, we might just tag existing or pull and tag
+        docker pull minio/minio:latest
+        docker tag minio/minio:latest ghcr.io/${{ github.repository }}/kairo-minio:latest
+
+        docker pull postgres:latest
+        docker tag postgres:latest ghcr.io/${{ github.repository }}/kairo-postgresql:latest
+
+        docker pull redis:latest
+        docker tag redis:latest ghcr.io/${{ github.repository }}/kairo-redis:latest
+
+        # Push images
+        docker push ghcr.io/${{ github.repository }}/kairo-backend:latest
+        docker push ghcr.io/${{ github.repository }}/kairo-register:latest
+        docker push ghcr.io/${{ github.repository }}/kairo-standalone:latest
+        docker push ghcr.io/${{ github.repository }}/kairo-local:latest
+        docker push ghcr.io/${{ github.repository }}/kairo-local-dev:latest
+        docker push ghcr.io/${{ github.repository }}/kairo-minio:latest
+        docker push ghcr.io/${{ github.repository }}/kairo-postgresql:latest
+        docker push ghcr.io/${{ github.repository }}/kairo-redis:latest
+
+        # Save tarballs for release artifacts
+        docker save ghcr.io/${{ github.repository }}/kairo-backend:latest | gzip > kairo-backend.tar.gz
+        docker save ghcr.io/${{ github.repository }}/kairo-register:latest | gzip > kairo-register.tar.gz
+        docker save ghcr.io/${{ github.repository }}/kairo-standalone:latest | gzip > kairo-standalone.tar.gz
+        docker save ghcr.io/${{ github.repository }}/kairo-local:latest | gzip > kairo-local.tar.gz
+        docker save ghcr.io/${{ github.repository }}/kairo-local-dev:latest | gzip > kairo-local-dev.tar.gz

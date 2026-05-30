@@ -38,7 +38,7 @@ compose_files_args() {
     return 1
   fi
   case "$profile" in
-    stack.distributed|base|infra.*)
+    stack.distributed|base|infra.*|app-backend.local|app-backend.local-dev)
       printf '%s\n' -f "$overlay"
       ;;
     *)

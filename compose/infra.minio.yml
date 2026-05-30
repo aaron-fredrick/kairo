@@ -18,7 +18,8 @@ services:
     image: caddy:2-alpine
     restart: unless-stopped
     ports:
-      - "0.0.0.0:7000:80"
+      - "7000:7000"
+      - "7001:7001"
     volumes:
       - ../infra/proxy/caddy/Caddyfile.minio:/etc/caddy/Caddyfile:ro
     depends_on:

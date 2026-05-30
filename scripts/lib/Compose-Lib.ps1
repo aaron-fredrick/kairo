@@ -30,13 +30,10 @@ function Get-ComposeFileArgs {
     if (-not (Test-Path $overlay)) {
         throw "Unknown compose profile '$Profile' (resolved: $resolved)"
     }
-    if ($resolved -eq "stack.distributed") {
+    if ($resolved -in "stack.distributed", "app-backend.local", "app-backend.local-dev", "base") {
         return @("-f", $overlay)
     }
     if ($resolved -like "infra.*") {
-        return @("-f", $overlay)
-    }
-    if ($resolved -eq "base") {
         return @("-f", $overlay)
     }
     $base = Join-Path $root "compose\base.yml"

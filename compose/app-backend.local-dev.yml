@@ -1,5 +1,5 @@
 # Hot-reload app-backend, Vite frontend (:5173), Caddy :80.
-# docker compose -f compose/base.yml -f compose/app-backend.local-dev.yml up --build
+# docker compose -f compose/app-backend.local-dev.yml up --build
 
 services:
   app-backend:

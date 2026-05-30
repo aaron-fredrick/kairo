@@ -1,165 +1,183 @@
-# Nightly: full backend matrix + coverage trend (mutation testing can be added later).
 name: CI Nightly
-
-on:
+'on':
   schedule:
-    - cron: "0 2 * * *"
-  workflow_dispatch:
-
+  - cron: 0 2 * * *
+  workflow_dispatch: null
 permissions:
   contents: read
   security-events: write
-
+  packages: write
 jobs:
   build:
     name: Build Frontend
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - name: Install dependencies and build
-        working-directory: ./frontend
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-        run: |
-          npm install --legacy-peer-deps
-          npm run build
-
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 20
+    - name: Install dependencies and build
+      working-directory: ./frontend
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      run: |
+        npm install --legacy-peer-deps
+        npm run build
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build Local Dev
+      run: docker build -f infra/docker/app-backend.local-dev.Dockerfile --target
+        dev -t kairo-local-dev .
+    - name: Build Local
+      run: docker build -f infra/docker/app-backend.local.Dockerfile --target runner
+        -t kairo-local .
   lint-backend:
-    name: Lint Backend (Ruff)
+    name: Lint Backend (Ruff & MyPy)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - run: pip install ruff
-      - run: ruff check . --output-format sarif -o ruff-results.sarif
-        continue-on-error: true
-      - uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: ruff-results.sarif
-          category: ruff
-
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - run: pip install ruff mypy
+    - run: ruff check . --output-format sarif -o ruff-results.sarif
+      continue-on-error: true
+    - uses: github/codeql-action/upload-sarif@v4
+      with:
+        sarif_file: ruff-results.sarif
+        category: ruff
+    - run: mypy app_backend/ app_register/ shared/ || true
   lint-frontend:
-    name: Lint Frontend (ESLint)
+    name: Lint Frontend (ESLint & Svelte Check)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - name: Install ESLint and SARIF formatter
-        working-directory: ./frontend
-        run: |
-          npm install --legacy-peer-deps
-          npm install eslint @microsoft/eslint-formatter-sarif --no-save --legacy-peer-deps
-      - name: Run ESLint
-        working-directory: ./frontend
-        run: npx eslint . -f @microsoft/eslint-formatter-sarif -o eslint-results.sarif || true
-      - uses: github/codeql-action/upload-sarif@v4
-        if: hashFiles('frontend/eslint-results.sarif') != ''
-        with:
-          sarif_file: frontend/eslint-results.sarif
-          category: eslint
-
-  static-analysis:
-    name: Static Analysis (Bandit)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - run: pip install "bandit[sarif]"
-      - run: bandit -r app_backend/ app_register/ shared/ -f sarif -o bandit-results.sarif
-        continue-on-error: true
-      - uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: bandit-results.sarif
-          category: bandit
-
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 20
+    - name: Install and Run
+      working-directory: ./frontend
+      run: |-
+        npm install --legacy-peer-deps
+        npm install eslint @microsoft/eslint-formatter-sarif --no-save --legacy-peer-deps
+        npx eslint . -f @microsoft/eslint-formatter-sarif -o eslint-results.sarif || true
+        npx svelte-check || true
+    - uses: github/codeql-action/upload-sarif@v4
+      if: hashFiles('frontend/eslint-results.sarif') != ''
+      with:
+        sarif_file: frontend/eslint-results.sarif
+        category: eslint
   security:
-    name: Security Scan (Trivy)
+    name: Security Scan (Bandit, Trivy, Audits)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: fs
-          scan-ref: "."
-          format: sarif
-          output: trivy-results.sarif
-          severity: CRITICAL,HIGH
-      - uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: trivy-results.sarif
-          category: trivy
-
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 20
+    - name: Pip Audit
+      run: |-
+        pip install pip-audit
+        pip-audit || true
+    - name: NPM Audit
+      working-directory: ./frontend
+      run: npm audit || true
+    - name: Bandit
+      run: |-
+        pip install "bandit[sarif]"
+        bandit -r app_backend/ app_register/ shared/ -f sarif -o bandit-results.sarif
+      continue-on-error: true
+    - uses: github/codeql-action/upload-sarif@v4
+      with:
+        sarif_file: bandit-results.sarif
+        category: bandit
+    - uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: fs
+        scan-ref: .
+        format: sarif
+        output: trivy-results.sarif
+        severity: CRITICAL,HIGH
+    - uses: github/codeql-action/upload-sarif@v4
+      with:
+        sarif_file: trivy-results.sarif
+        category: trivy
   test:
-    name: Backend Tests (full matrix)
+    name: Backend Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-      - name: Run Pytest (coverage)
-        env:
-          ENV: test
-          DB_BACKEND: sqlite
-          SQLITE_URL: sqlite+aiosqlite:///./data/test/ci-pytest.db
-          EVENT_BUS: local
-          JWT_SECRET: test-jwt-secret-for-ci-only
-          ADMIN_PASSWORD: admin
-          DATA_DIR: data/test
-        run: |
-          mkdir -p data/test
-          rm -f data/test/ci-pytest.db
-          pytest tests/app_backend tests/app_register tests/shared -m "unit or component" \
-            --cov=app_backend --cov=app_register --cov-config=.coveragerc --cov-report=xml:coverage.xml \
-            --junitxml=junit-unit-component.xml -v
-          pytest tests/app_backend -m integration \
-            --cov=app_backend --cov-config=.coveragerc --cov-append --cov-report=xml:coverage.xml \
-            --junitxml=junit-integration.xml -v
-      - name: Upload coverage to Codecov
-        if: success()
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ${{ github.workspace }}/coverage.xml
-          report_type: coverage
-          disable_search: true
-          flags: backend,nightly
-          verbose: true
-          fail_ci_if_error: true
-      - name: Run Pytest (smoke, e2e, extended)
-        env:
-          ENV: test
-          DB_BACKEND: sqlite
-          SQLITE_URL: sqlite+aiosqlite:///./data/test/ci-pytest.db
-          EVENT_BUS: local
-          JWT_SECRET: test-jwt-secret-for-ci-only
-          ADMIN_PASSWORD: admin
-          DATA_DIR: data/test
-        run: |
-          pytest tests/app_backend -m smoke --junitxml=junit-smoke.xml -v
-          pytest tests/app_backend -m e2e --junitxml=junit-e2e.xml -v
-          pytest tests/app_backend -m regression --junitxml=junit-regression.xml -v || true
-          pytest tests/app_backend -m "functional or contract or acceptance" --junitxml=junit-extended.xml -v || true
-      - name: Upload test results to Codecov
-        if: success()
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          report_type: test_results
-          disable_search: true
-          files: junit-unit-component.xml,junit-integration.xml,junit-smoke.xml,junit-e2e.xml,junit-regression.xml,junit-extended.xml
-          handle_no_reports_found: true
-          fail_ci_if_error: false
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Install dependencies
+      run: pip install -r requirements.txt
+    - name: Run Pytest (coverage)
+      env:
+        ENV: test
+        DB_BACKEND: sqlite
+        SQLITE_URL: sqlite+aiosqlite:///./data/test/ci-pytest.db
+        EVENT_BUS: local
+        JWT_SECRET: test-jwt-secret-for-ci-only
+        ADMIN_PASSWORD: admin
+        DATA_DIR: data/test
+      run: |-
+        mkdir -p data/test
+        rm -f data/test/ci-pytest.db
+        pytest tests/app_backend tests/app_register tests/shared -m "unit or component" \
+          --cov=app_backend --cov=app_register --cov-config=.coveragerc --cov-report=xml:coverage.xml \
+          --junitxml=junit-unit-component.xml -v
+        pytest tests/app_backend -m integration \
+          --cov=app_backend --cov-config=.coveragerc --cov-append --cov-report=xml:coverage.xml \
+          --junitxml=junit-integration.xml -v
+    - name: Upload coverage to Codecov
+      if: success()
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        files: ${{ github.workspace }}/coverage.xml
+        report_type: coverage
+        disable_search: true
+        flags: backend,nightly
+        verbose: true
+        fail_ci_if_error: true
+    - name: Run Pytest (extended test matrix)
+      env:
+        ENV: test
+        DB_BACKEND: sqlite
+        SQLITE_URL: sqlite+aiosqlite:///./data/test/ci-pytest.db
+        EVENT_BUS: local
+        JWT_SECRET: test-jwt-secret-for-ci-only
+        ADMIN_PASSWORD: admin
+        DATA_DIR: data/test
+      run: |-
+        pytest tests/app_backend -m smoke --junitxml=junit-smoke.xml -v
+        pytest tests/app_backend -m e2e --junitxml=junit-e2e.xml -v
+        pytest tests/app_backend -m regression --junitxml=junit-regression.xml -v || true
+        pytest tests/app_backend -m functional --junitxml=junit-functional.xml -v || true
+        pytest tests/app_backend -m contract --junitxml=junit-contract.xml -v || true
+        pytest tests/app_backend -m acceptance --junitxml=junit-acceptance.xml -v || true
+        pytest tests/app_backend -m load --junitxml=junit-load.xml -v || true
+        pytest tests/app_backend -m stress --junitxml=junit-stress.xml -v || true
+        pytest tests/app_backend -m spike --junitxml=junit-spike.xml -v || true
+        pytest tests/app_backend -m soak --junitxml=junit-soak.xml -v || true
+        pytest tests/app_backend -m chaos --junitxml=junit-chaos.xml -v || true
+        pytest tests/app_backend -m mutation --junitxml=junit-mutation.xml -v || true
+    - name: Upload test results to Codecov
+      if: success()
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        report_type: test_results
+        disable_search: true
+        files: junit-unit-component.xml,junit-smoke.xml,junit-e2e.xml,junit-regression.xml,junit-functional.xml,junit-contract.xml,junit-integration.xml,junit-acceptance.xml,junit-load.xml,junit-stress.xml,junit-spike.xml,junit-soak.xml,junit-chaos.xml,junit-mutation.xml
+        fail_ci_if_error: false
+        handle_no_reports_found: true
