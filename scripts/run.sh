@@ -10,7 +10,7 @@ cd "$(run_root)"
 
 run_load_env
 run_print_native_banner
-run_ensure_frontend_built
+run_build_frontend
 
 echo "Open http://127.0.0.1:8000"
 echo ""

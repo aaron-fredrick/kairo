@@ -1,5 +1,5 @@
 @echo off
-REM Native local — built frontend + API on :8000 (no Docker).
+REM Native local — built frontend served by API on :8000 (no Docker).
 REM   scripts\run.bat
 setlocal
 cd /d "%~dp0.."
@@ -10,8 +10,11 @@ if not exist "app_backend\main.py" (
 )
 
 if not exist "app_backend\static\index.html" (
-    echo Frontend not built — running build_frontend.bat ...
-    call "%~dp0build_frontend.bat"
+    echo Building frontend into app_backend\static\ ...
+    pushd frontend
+    call npm install --legacy-peer-deps
+    call npm run build
+    popd
     if errorlevel 1 exit /b 1
 )
 

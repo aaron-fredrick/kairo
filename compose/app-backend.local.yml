@@ -5,8 +5,8 @@ services:
   app-backend:
     build:
       context: ..
-      dockerfile: infra/docker/app-backend.local.Dockerfile
-      target: runner
+      dockerfile: infra/docker/server.Dockerfile
+      target: server
     restart: unless-stopped
     volumes:
       - ../data:/usr/src/app/data

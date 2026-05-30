@@ -30,12 +30,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - name: Build Local Dev
-      run: docker build -f infra/docker/app-backend.local-dev.Dockerfile --target
-        dev -t kairo-local-dev .
-    - name: Build Local
-      run: docker build -f infra/docker/app-backend.local.Dockerfile --target runner
-        -t kairo-local .
+    - name: Build kairo-frontend
+      run: docker build -f infra/docker/frontend.Dockerfile --target runner -t kairo-frontend .
+    - name: Build kairo-backend
+      run: docker build -f infra/docker/backend.Dockerfile --target backend -t kairo-backend .
+    - name: Build kairo-server
+      run: docker build -f infra/docker/server.Dockerfile --target server -t kairo-server .
+    - name: Build kairo-register
+      run: docker build -f infra/docker/register.Dockerfile -t kairo-register .
   lint-backend:
     name: Lint Backend (Ruff)
     runs-on: ubuntu-latest

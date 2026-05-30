@@ -15,7 +15,8 @@ permissions:
 jobs:
   cd-publish:
     name: Publish GHCR Images
-    runs-on: ubuntu-${{ github.event.workflow_run.head_branch }}
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success'
 
     permissions:
       contents: write
@@ -31,33 +32,50 @@ jobs:
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-      - name: Build Backend Images
+      - name: Build kairo-frontend
         run: |
-          cp infra/docker/dockerignore.backend .dockerignore
-
+          cp infra/docker/frontend.Dockerfile.dockerignore .dockerignore
           docker build \
-            -f infra/docker/app-backend.local.Dockerfile \
+            -f infra/docker/frontend.Dockerfile \
             --target runner \
+            -t ghcr.io/${{ github.repository }}/kairo-frontend:${{ github.event.workflow_run.head_branch }} .
+
+      - name: Build kairo-backend
+        run: |
+          cp infra/docker/backend.Dockerfile.dockerignore .dockerignore
+          docker build \
+            -f infra/docker/backend.Dockerfile \
+            --target backend \
             -t ghcr.io/${{ github.repository }}/kairo-backend:${{ github.event.workflow_run.head_branch }} .
 
-      - name: Build Register Service
+      - name: Build kairo-server
         run: |
-          cp infra/docker/dockerignore.register .dockerignore
-
+          cp infra/docker/server.Dockerfile.dockerignore .dockerignore
           docker build \
-            -f infra/docker/app-register.Dockerfile \
+            -f infra/docker/server.Dockerfile \
+            --target server \
+            -t ghcr.io/${{ github.repository }}/kairo-server:${{ github.event.workflow_run.head_branch }} .
+
+      - name: Build kairo-register
+        run: |
+          cp infra/docker/register.Dockerfile.dockerignore .dockerignore
+          docker build \
+            -f infra/docker/register.Dockerfile \
             -t ghcr.io/${{ github.repository }}/kairo-register:${{ github.event.workflow_run.head_branch }} .
 
       - name: Push Images
         run: |
+          docker push ghcr.io/${{ github.repository }}/kairo-frontend:${{ github.event.workflow_run.head_branch }}
           docker push ghcr.io/${{ github.repository }}/kairo-backend:${{ github.event.workflow_run.head_branch }}
+          docker push ghcr.io/${{ github.repository }}/kairo-server:${{ github.event.workflow_run.head_branch }}
           docker push ghcr.io/${{ github.repository }}/kairo-register:${{ github.event.workflow_run.head_branch }}
 
       - name: Export Images as Artifacts
         run: |
           mkdir -p artifacts
-
-          docker save ghcr.io/${{ github.repository }}/kairo-backend:${{ github.event.workflow_run.head_branch }} | gzip > artifacts/kairo-backend.tar.gz
+          docker save ghcr.io/${{ github.repository }}/kairo-frontend:${{ github.event.workflow_run.head_branch }} | gzip > artifacts/kairo-frontend.tar.gz
+          docker save ghcr.io/${{ github.repository }}/kairo-backend:${{ github.event.workflow_run.head_branch }}  | gzip > artifacts/kairo-backend.tar.gz
+          docker save ghcr.io/${{ github.repository }}/kairo-server:${{ github.event.workflow_run.head_branch }}   | gzip > artifacts/kairo-server.tar.gz
           docker save ghcr.io/${{ github.repository }}/kairo-register:${{ github.event.workflow_run.head_branch }} | gzip > artifacts/kairo-register.tar.gz
 
       - name: Upload Artifacts
@@ -65,5 +83,3 @@ jobs:
         with:
           name: docker-images
           path: artifacts/
-
-    if: github.event.workflow_run.conclusion == 'success'

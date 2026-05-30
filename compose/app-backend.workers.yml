@@ -5,7 +5,8 @@ services:
   app-backend:
     build:
       context: ..
-      dockerfile: infra/docker/app-backend.local.Dockerfile
+      dockerfile: infra/docker/backend.Dockerfile
+      target: backend
     restart: unless-stopped
     environment:
       ENV: production

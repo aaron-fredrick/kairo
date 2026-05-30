@@ -1,0 +1,43 @@
+# Git
+.git
+.gitignore
+.github
+
+# Python
+app_backend/
+app_register/
+shared/
+config/
+requirements.txt
+*.py
+*.pyc
+__pycache__/
+
+# Node artifacts
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm/
+frontend/dist/
+frontend/.svelte-kit/
+frontend/coverage/
+
+# Data and SQLite
+data/
+*.db
+*.sqlite3
+
+# Editor/OS
+.vscode/
+.cursor/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose*.yml
+compose/
+infra/

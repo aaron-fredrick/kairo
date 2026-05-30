@@ -5,7 +5,7 @@ services:
   app-register:
     build:
       context: ..
-      dockerfile: infra/docker/app-register.Dockerfile
+      dockerfile: infra/docker/register.Dockerfile
     restart: unless-stopped
     environment:
       REGISTER_SYSTEM_KEY: ${REGISTER_SYSTEM_KEY:-change_me_register_system_key}

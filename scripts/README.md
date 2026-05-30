@@ -6,26 +6,31 @@ Run from the **repository root** (scripts `cd` to root automatically).
 
 | Script | Same as compose profile | What you get |
 |--------|-------------------------|--------------|
-| **`run.sh`** / **`run.bat`** | `local` | Built UI in API → **http://127.0.0.1:8000** |
-| **`run_dev.sh`** / **`run_dev.bat`** | `local-dev` | API reload `:8000` + Vite **http://127.0.0.1:5173** |
+| **`run.sh`** / **`run.ps1`** / **`run.bat`** | `local` | Built UI served by API — **http://127.0.0.1:8000** |
+| **`run_dev.sh`** / **`run_dev.ps1`** / **`run_dev.bat`** | `local-dev` | API hot-reload `:8000` + Vite **http://127.0.0.1:5173** |
 
 Uses `.env` (defaults: `DB_BACKEND=sqlite`, `EVENT_BUS=local`). No containers started.
 
-`start.sh` / `start.bat` are aliases for **`run`**.
-
 ```bash
+# Linux / macOS
 ./scripts/run.sh
 ./scripts/run_dev.sh
+
+# PowerShell
+.\scripts\run.ps1
+.\scripts\run_dev.ps1
+
+# CMD
 scripts\run.bat
 scripts\run_dev.bat
 ```
 
 ## Docker Compose
 
-Docker equivalents live under **`scripts/compose/`** (not `run` / `run_dev`):
+Docker equivalents live under **`scripts/compose/`**:
 
-| Native | Docker |
-|--------|--------|
+| Native | Docker equivalent |
+|--------|-------------------|
 | `run` | `compose/local.sh` or `compose\local.bat` |
 | `run_dev` | `compose/local-dev.sh` or `compose\local-dev.bat` |
 
@@ -60,8 +65,7 @@ After Docker **local** / **local-dev**: **http://127.0.0.1** (Caddy). Native **r
 
 | Script | Description |
 |--------|-------------|
-| `build_frontend` | Build UI → `app_backend/static/` |
-| `run_frontend` | Vite only (included in `run_dev`) |
-| `start_backend` | MinIO via Docker + API on `:8000` (legacy helper) |
+| `migrate.sh` | Run Alembic DB migrations |
+| `seed.py` | Seed the database with initial data |
 
 See [compose/README.md](../compose/README.md) for stack files.
