@@ -41,7 +41,7 @@ jobs:
     - uses: actions/checkout@v4
     - uses: actions/setup-python@v5
       with:
-        python-version: '3.11'
+        python-version: '3.12'
     - run: pip install ruff
     - run: ruff check . --output-format sarif -o ruff-results.sarif
       continue-on-error: true
@@ -75,7 +75,7 @@ jobs:
     - uses: actions/checkout@v4
     - uses: actions/setup-python@v5
       with:
-        python-version: '3.11'
+        python-version: '3.12'
     - run: pip install mypy
     - run: mypy app_backend/ app_register/ shared/ || true
   static-frontend:
@@ -98,7 +98,7 @@ jobs:
     - uses: actions/checkout@v4
     - uses: actions/setup-python@v5
       with:
-        python-version: '3.11'
+        python-version: '3.12'
     - uses: actions/setup-node@v4
       with:
         node-version: 20
@@ -138,7 +138,7 @@ jobs:
         fetch-depth: 0
     - uses: actions/setup-python@v5
       with:
-        python-version: '3.11'
+        python-version: '3.12'
     - name: Install dependencies
       run: pip install -r requirements.txt
     - name: Run Pytest (coverage)
