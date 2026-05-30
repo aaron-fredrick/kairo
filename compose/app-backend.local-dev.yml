@@ -5,7 +5,7 @@ services:
   app-backend:
     build:
       context: ..
-      dockerfile: infra/docker/app-backend.Dockerfile
+      dockerfile: infra/docker/app-backend.local-dev.Dockerfile
       target: dev
     restart: unless-stopped
     command: >
