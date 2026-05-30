@@ -40,7 +40,7 @@ jobs:
           docker build \
             -f infra/docker/frontend.Dockerfile \
             --target runner \
-            -t ghcr.io/${{ github.repository }}/kairo-frontend:latest .
+            -t ghcr.io/${{ github.repository_owner }}/kairo-frontend:latest .
 
       - name: Build kairo-backend
         run: |
@@ -48,7 +48,7 @@ jobs:
           docker build \
             -f infra/docker/backend.Dockerfile \
             --target backend \
-            -t ghcr.io/${{ github.repository }}/kairo-backend:latest .
+            -t ghcr.io/${{ github.repository_owner }}/kairo-backend:latest .
 
       - name: Build kairo-server
         run: |
@@ -56,29 +56,29 @@ jobs:
           docker build \
             -f infra/docker/server.Dockerfile \
             --target server \
-            -t ghcr.io/${{ github.repository }}/kairo-server:latest .
+            -t ghcr.io/${{ github.repository_owner }}/kairo-server:latest .
 
       - name: Build kairo-register
         run: |
           cp infra/docker/register.Dockerfile.dockerignore .dockerignore
           docker build \
             -f infra/docker/register.Dockerfile \
-            -t ghcr.io/${{ github.repository }}/kairo-register:latest .
+            -t ghcr.io/${{ github.repository_owner }}/kairo-register:latest .
 
       - name: Push Images
         run: |
-          docker push ghcr.io/${{ github.repository }}/kairo-frontend:latest
-          docker push ghcr.io/${{ github.repository }}/kairo-backend:latest
-          docker push ghcr.io/${{ github.repository }}/kairo-server:latest
-          docker push ghcr.io/${{ github.repository }}/kairo-register:latest
+          docker push ghcr.io/${{ github.repository_owner }}/kairo-frontend:latest
+          docker push ghcr.io/${{ github.repository_owner }}/kairo-backend:latest
+          docker push ghcr.io/${{ github.repository_owner }}/kairo-server:latest
+          docker push ghcr.io/${{ github.repository_owner }}/kairo-register:latest
 
       - name: Export Images as Artifacts
         run: |
           mkdir -p artifacts
-          docker save ghcr.io/${{ github.repository }}/kairo-frontend:latest | gzip > artifacts/kairo-frontend.tar.gz
-          docker save ghcr.io/${{ github.repository }}/kairo-backend:latest  | gzip > artifacts/kairo-backend.tar.gz
-          docker save ghcr.io/${{ github.repository }}/kairo-server:latest   | gzip > artifacts/kairo-server.tar.gz
-          docker save ghcr.io/${{ github.repository }}/kairo-register:latest | gzip > artifacts/kairo-register.tar.gz
+          docker save ghcr.io/${{ github.repository_owner }}/kairo-frontend:latest | gzip > artifacts/kairo-frontend.tar.gz
+          docker save ghcr.io/${{ github.repository_owner }}/kairo-backend:latest  | gzip > artifacts/kairo-backend.tar.gz
+          docker save ghcr.io/${{ github.repository_owner }}/kairo-server:latest   | gzip > artifacts/kairo-server.tar.gz
+          docker save ghcr.io/${{ github.repository_owner }}/kairo-register:latest | gzip > artifacts/kairo-register.tar.gz
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
