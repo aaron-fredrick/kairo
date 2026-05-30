@@ -10,7 +10,7 @@ permissions:
   security-events: write
   packages: write
 jobs:
-  build:
+  build-frontend:
     name: Build Frontend
     runs-on: ubuntu-latest
     steps:
@@ -25,7 +25,7 @@ jobs:
       run: |
         npm install --legacy-peer-deps
         npm run build
-  docker-build:
+  build-container:
     name: Docker Build
     runs-on: ubuntu-latest
     steps:
@@ -37,41 +37,62 @@ jobs:
       run: docker build -f infra/docker/app-backend.local.Dockerfile --target runner
         -t kairo-local .
   lint-backend:
-    name: Lint Backend (Ruff & MyPy)
+    name: Lint Backend (Ruff)
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-python@v5
       with:
         python-version: '3.11'
-    - run: pip install ruff mypy
+    - run: pip install ruff
     - run: ruff check . --output-format sarif -o ruff-results.sarif
       continue-on-error: true
     - uses: github/codeql-action/upload-sarif@v4
       with:
         sarif_file: ruff-results.sarif
         category: ruff
-    - run: mypy app_backend/ app_register/ shared/ || true
   lint-frontend:
-    name: Lint Frontend (ESLint & Svelte Check)
+    name: Lint Frontend (ESLint)
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-node@v4
       with:
         node-version: 20
-    - name: Install and Run
+    - name: Install and Run ESLint
       working-directory: ./frontend
       run: |-
         npm install --legacy-peer-deps
         npm install eslint @microsoft/eslint-formatter-sarif --no-save --legacy-peer-deps
         npx eslint . -f @microsoft/eslint-formatter-sarif -o eslint-results.sarif || true
-        npx svelte-check || true
     - uses: github/codeql-action/upload-sarif@v4
       if: hashFiles('frontend/eslint-results.sarif') != ''
       with:
         sarif_file: frontend/eslint-results.sarif
         category: eslint
+  static-backend:
+    name: Static Analysis Backend (MyPy)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - run: pip install mypy
+    - run: mypy app_backend/ app_register/ shared/ || true
+  static-frontend:
+    name: Static Analysis Frontend (Svelte Check)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 20
+    - name: Install and Run Svelte Check
+      working-directory: ./frontend
+      run: |-
+        npm install --legacy-peer-deps
+        npx svelte-check || true
   security:
     name: Security Scan (Bandit, Trivy, Audits)
     runs-on: ubuntu-latest
