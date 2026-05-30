@@ -10,7 +10,7 @@ RUN npm run build
 
 FROM nginx:1.27-alpine AS runner
 
-COPY --from=builder /app/dist /usr/share/nginx/html
+COPY --from=builder /app_backend/static /usr/share/nginx/html
 
 EXPOSE 80
 

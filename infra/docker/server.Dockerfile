@@ -44,6 +44,6 @@ RUN npm run build
 
 FROM backend AS server
 
-COPY --from=frontend-builder /fe/dist ./app_backend/static
+COPY --from=frontend-builder /app_backend/static ./app_backend/static
 
 CMD ["uvicorn", "app_backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
