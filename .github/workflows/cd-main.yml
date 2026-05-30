@@ -1,60 +1,71 @@
 name: CD Main
-'on':
+
+on:
   workflow_run:
     workflows:
-    - CI Merge (main)
+      - CI Merge (main)
     types:
-    - completed
+      - completed
     branches:
-    - main
+      - main
+
 permissions:
   contents: write
   security-events: none
   packages: write
+
 jobs:
   cd-publish:
     name: Publish GHCR Images
     runs-on: ubuntu-latest
+
     permissions:
       contents: write
       packages: write
+
     steps:
-    - uses: actions/checkout@v4
-    - name: Build, Tag, and Push Docker Images
-      run: |
-        echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - uses: actions/checkout@v4
 
-        # Build images
-        docker build -f infra/docker/app-backend.local.Dockerfile --target runner -t ghcr.io/${{ github.repository }}/kairo-backend:latest .
-        docker build -f infra/docker/app-register.Dockerfile -t ghcr.io/${{ github.repository }}/kairo-register:latest .
-        docker build -f infra/docker/app-backend.local.Dockerfile --target runner -t ghcr.io/${{ github.repository }}/kairo-standalone:latest .
-        docker build -f infra/docker/app-backend.local.Dockerfile --target runner -t ghcr.io/${{ github.repository }}/kairo-local:latest .
-        docker build -f infra/docker/app-backend.local-dev.Dockerfile --target dev -t ghcr.io/${{ github.repository }}/kairo-local-dev:latest .
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-        # For minio, postgresql, redis, we might just tag existing or pull and tag
-        docker pull minio/minio:latest
-        docker tag minio/minio:latest ghcr.io/${{ github.repository }}/kairo-minio:latest
+      - name: Login to GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-        docker pull postgres:latest
-        docker tag postgres:latest ghcr.io/${{ github.repository }}/kairo-postgresql:latest
+      - name: Build Backend Images
+        run: |
+          cp infra/docker/dockerignore.backend .dockerignore
 
-        docker pull redis:latest
-        docker tag redis:latest ghcr.io/${{ github.repository }}/kairo-redis:latest
+          docker build \
+            -f infra/docker/app-backend.local.Dockerfile \
+            --target runner \
+            -t ghcr.io/${{ github.repository }}/kairo-backend:latest .
 
-        # Push images
-        docker push ghcr.io/${{ github.repository }}/kairo-backend:latest
-        docker push ghcr.io/${{ github.repository }}/kairo-register:latest
-        docker push ghcr.io/${{ github.repository }}/kairo-standalone:latest
-        docker push ghcr.io/${{ github.repository }}/kairo-local:latest
-        docker push ghcr.io/${{ github.repository }}/kairo-local-dev:latest
-        docker push ghcr.io/${{ github.repository }}/kairo-minio:latest
-        docker push ghcr.io/${{ github.repository }}/kairo-postgresql:latest
-        docker push ghcr.io/${{ github.repository }}/kairo-redis:latest
+      - name: Build Register Service
+        run: |
+          cp infra/docker/dockerignore.register .dockerignore
 
-        # Save tarballs for release artifacts
-        docker save ghcr.io/${{ github.repository }}/kairo-backend:latest | gzip > kairo-backend.tar.gz
-        docker save ghcr.io/${{ github.repository }}/kairo-register:latest | gzip > kairo-register.tar.gz
-        docker save ghcr.io/${{ github.repository }}/kairo-standalone:latest | gzip > kairo-standalone.tar.gz
-        docker save ghcr.io/${{ github.repository }}/kairo-local:latest | gzip > kairo-local.tar.gz
-        docker save ghcr.io/${{ github.repository }}/kairo-local-dev:latest | gzip > kairo-local-dev.tar.gz
+          docker build \
+            -f infra/docker/app-register.Dockerfile \
+            -t ghcr.io/${{ github.repository }}/kairo-register:latest .
+
+      - name: Push Images
+        run: |
+          docker push ghcr.io/${{ github.repository }}/kairo-backend:latest
+          docker push ghcr.io/${{ github.repository }}/kairo-register:latest
+
+      - name: Export Images as Artifacts
+        run: |
+          mkdir -p artifacts
+
+          docker save ghcr.io/${{ github.repository }}/kairo-backend:latest | gzip > artifacts/kairo-backend.tar.gz
+          docker save ghcr.io/${{ github.repository }}/kairo-register:latest | gzip > artifacts/kairo-register.tar.gz
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-images
+          path: artifacts/
+
     if: github.event.workflow_run.conclusion == 'success'

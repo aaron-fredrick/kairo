@@ -1,68 +1,69 @@
 name: CD Tag
-'on':
+
+on:
   workflow_run:
     workflows:
-    - CI Tag
+      - CI Tag
     types:
-    - completed
+      - completed
+
 permissions:
   contents: write
   security-events: none
   packages: write
+
 jobs:
   cd-publish:
     name: Publish GHCR Images
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-${{ github.event.workflow_run.head_branch }}
+
     permissions:
       contents: write
       packages: write
+
     steps:
-    - uses: actions/checkout@v4
-    - name: Build, Tag, and Push Docker Images
-      run: |
-        echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - uses: actions/checkout@v4
 
-        # Build images
-        docker build -f infra/docker/app-backend.local.Dockerfile --target runner -t ghcr.io/${{ github.repository }}/kairo-backend:${{ github.event.workflow_run.head_branch }} .
-        docker build -f infra/docker/app-register.Dockerfile -t ghcr.io/${{ github.repository }}/kairo-register:${{ github.event.workflow_run.head_branch }} .
-        docker build -f infra/docker/app-backend.local.Dockerfile --target runner -t ghcr.io/${{ github.repository }}/kairo-standalone:${{ github.event.workflow_run.head_branch }} .
-        docker build -f infra/docker/app-backend.local.Dockerfile --target runner -t ghcr.io/${{ github.repository }}/kairo-local:${{ github.event.workflow_run.head_branch }} .
-        docker build -f infra/docker/app-backend.local-dev.Dockerfile --target dev -t ghcr.io/${{ github.repository }}/kairo-local-dev:${{ github.event.workflow_run.head_branch }} .
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-        # For minio, postgresql, redis, we might just tag existing or pull and tag
-        docker pull minio/minio:latest
-        docker tag minio/minio:latest ghcr.io/${{ github.repository }}/kairo-minio:${{ github.event.workflow_run.head_branch }}
+      - name: Login to GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-        docker pull postgres:latest
-        docker tag postgres:latest ghcr.io/${{ github.repository }}/kairo-postgresql:${{ github.event.workflow_run.head_branch }}
+      - name: Build Backend Images
+        run: |
+          cp infra/docker/dockerignore.backend .dockerignore
 
-        docker pull redis:latest
-        docker tag redis:latest ghcr.io/${{ github.repository }}/kairo-redis:${{ github.event.workflow_run.head_branch }}
+          docker build \
+            -f infra/docker/app-backend.local.Dockerfile \
+            --target runner \
+            -t ghcr.io/${{ github.repository }}/kairo-backend:${{ github.event.workflow_run.head_branch }} .
 
-        # Push images
-        docker push ghcr.io/${{ github.repository }}/kairo-backend:${{ github.event.workflow_run.head_branch }}
-        docker push ghcr.io/${{ github.repository }}/kairo-register:${{ github.event.workflow_run.head_branch }}
-        docker push ghcr.io/${{ github.repository }}/kairo-standalone:${{ github.event.workflow_run.head_branch }}
-        docker push ghcr.io/${{ github.repository }}/kairo-local:${{ github.event.workflow_run.head_branch }}
-        docker push ghcr.io/${{ github.repository }}/kairo-local-dev:${{ github.event.workflow_run.head_branch }}
-        docker push ghcr.io/${{ github.repository }}/kairo-minio:${{ github.event.workflow_run.head_branch }}
-        docker push ghcr.io/${{ github.repository }}/kairo-postgresql:${{ github.event.workflow_run.head_branch }}
-        docker push ghcr.io/${{ github.repository }}/kairo-redis:${{ github.event.workflow_run.head_branch }}
+      - name: Build Register Service
+        run: |
+          cp infra/docker/dockerignore.register .dockerignore
 
-        # Save tarballs for release artifacts
-        docker save ghcr.io/${{ github.repository }}/kairo-backend:${{ github.event.workflow_run.head_branch }} | gzip > kairo-backend.tar.gz
-        docker save ghcr.io/${{ github.repository }}/kairo-register:${{ github.event.workflow_run.head_branch }} | gzip > kairo-register.tar.gz
-        docker save ghcr.io/${{ github.repository }}/kairo-standalone:${{ github.event.workflow_run.head_branch }} | gzip > kairo-standalone.tar.gz
-        docker save ghcr.io/${{ github.repository }}/kairo-local:${{ github.event.workflow_run.head_branch }} | gzip > kairo-local.tar.gz
-        docker save ghcr.io/${{ github.repository }}/kairo-local-dev:${{ github.event.workflow_run.head_branch }} | gzip > kairo-local-dev.tar.gz
-    - name: Create Release
-      uses: softprops/action-gh-release@v2
-      with:
-        generate_release_notes: true
-        files: |
-          kairo-backend.tar.gz
-          kairo-register.tar.gz
-          kairo-standalone.tar.gz
-          kairo-local.tar.gz
-          kairo-local-dev.tar.gz
+          docker build \
+            -f infra/docker/app-register.Dockerfile \
+            -t ghcr.io/${{ github.repository }}/kairo-register:${{ github.event.workflow_run.head_branch }} .
+
+      - name: Push Images
+        run: |
+          docker push ghcr.io/${{ github.repository }}/kairo-backend:${{ github.event.workflow_run.head_branch }}
+          docker push ghcr.io/${{ github.repository }}/kairo-register:${{ github.event.workflow_run.head_branch }}
+
+      - name: Export Images as Artifacts
+        run: |
+          mkdir -p artifacts
+
+          docker save ghcr.io/${{ github.repository }}/kairo-backend:${{ github.event.workflow_run.head_branch }} | gzip > artifacts/kairo-backend.tar.gz
+          docker save ghcr.io/${{ github.repository }}/kairo-register:${{ github.event.workflow_run.head_branch }} | gzip > artifacts/kairo-register.tar.gz
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-images
+          path: artifacts/
+
     if: github.event.workflow_run.conclusion == 'success'
