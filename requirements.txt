@@ -8,15 +8,15 @@ fastapi==0.100.0
 httpx2==2.2.0  # Starlette TestClient (pytest) — avoids httpx deprecation warning
 httpx==0.24.0
 pdf2image==1.17.0
-pillow==10.0.0
+pillow==12.2.0
 pydantic-settings==2.0
-pydantic==2.0
+pydantic==2.4.0
 pytest-asyncio==0.23.0
 pytest-cov==4.1.0
-pytest==7.3.0
+pytest==9.0.3
 python-docx==1.2.0
-python-jose[cryptography]==3.3.0
-python-multipart==0.0.6
+python-jose[cryptography]==3.4.0
+python-multipart==0.0.27
 redis[hiredis]==4.6.0
 sqlalchemy[asyncio]==2.0.0
 uvicorn[standard]==0.22.0
