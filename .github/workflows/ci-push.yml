@@ -1,14 +1,17 @@
 name: CI Push
+
 'on':
   push:
     branches-ignore:
     - main
     tags-ignore:
     - '**'
+
 permissions:
   contents: read
   security-events: write
   packages: write
+
 jobs:
   build-frontend:
     name: Build Frontend
@@ -19,12 +22,13 @@ jobs:
       with:
         node-version: 20
     - name: Install dependencies and build
-      working-directory: ./frontend
+      working-directory: ./src/frontend
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       run: |
         npm ci --legacy-peer-deps
         npm run build
+
   build-container:
     name: Docker Build
     runs-on: ubuntu-latest
@@ -38,6 +42,7 @@ jobs:
       run: docker build -f infra/docker/server.Dockerfile --target server -t kairo-server .
     - name: Build kairo-register
       run: docker build -f infra/docker/register.Dockerfile -t kairo-register .
+
   lint-backend:
     name: Lint Backend (Ruff)
     runs-on: ubuntu-latest
@@ -47,12 +52,29 @@ jobs:
       with:
         python-version: '3.12'
     - run: pip install ruff
-    - run: ruff check . --output-format sarif -o ruff-results.sarif
+    - run: ruff check src/backend/ --output-format sarif -o ruff-backend.sarif
       continue-on-error: true
     - uses: github/codeql-action/upload-sarif@v4
       with:
-        sarif_file: ruff-results.sarif
+        sarif_file: ruff-backend.sarif
         category: ruff
+
+  lint-register:
+    name: Lint Register (Ruff)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - run: pip install ruff
+    - run: ruff check src/register/ --output-format sarif -o ruff-register.sarif
+      continue-on-error: true
+    - uses: github/codeql-action/upload-sarif@v4
+      with:
+        sarif_file: ruff-register.sarif
+        category: ruff
+
   lint-frontend:
     name: Lint Frontend (ESLint)
     runs-on: ubuntu-latest
@@ -62,18 +84,19 @@ jobs:
       with:
         node-version: 20
     - name: Install and Run ESLint
-      working-directory: ./frontend
+      working-directory: ./src/frontend
       run: |-
         npm ci --legacy-peer-deps
         npm ci eslint @microsoft/eslint-formatter-sarif --no-save --legacy-peer-deps
-        npx eslint . -f @microsoft/eslint-formatter-sarif -o eslint-results.sarif || true
+        npx eslint src/frontend/ -f @microsoft/eslint-formatter-sarif -o eslint-frontend.sarif || true
     - uses: github/codeql-action/upload-sarif@v4
-      if: hashFiles('frontend/eslint-results.sarif') != ''
+      if: hashFiles('src/frontend/eslint-frontend.sarif') != ''
       with:
-        sarif_file: frontend/eslint-results.sarif
+        sarif_file: src/frontend/eslint-frontend.sarif
         category: eslint
-  static-backend:
-    name: Static Analysis Backend (MyPy)
+
+  static-app:
+    name: Static Analysis Backend and Register (MyPy)
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -82,6 +105,7 @@ jobs:
         python-version: '3.12'
     - run: pip install mypy
     - run: mypy src/backend/ src/register/ shared/ || true
+
   static-frontend:
     name: Static Analysis Frontend (Svelte Check)
     runs-on: ubuntu-latest
@@ -91,10 +115,11 @@ jobs:
       with:
         node-version: 20
     - name: Install and Run Svelte Check
-      working-directory: ./frontend
+      working-directory: ./src/frontend
       run: |-
         npm ci --legacy-peer-deps
         npx svelte-check || true
+
   security:
     name: Security Scan (Bandit, Trivy, Audits)
     runs-on: ubuntu-latest
@@ -111,7 +136,7 @@ jobs:
         pip install pip-audit
         pip-audit || true
     - name: NPM Audit
-      working-directory: ./frontend
+      working-directory: ./src/frontend
       run: npm audit || true
     - name: Bandit
       run: |-
@@ -133,6 +158,7 @@ jobs:
       with:
         sarif_file: trivy-results.sarif
         category: trivy
+
   test:
     name: Backend Tests
     runs-on: ubuntu-latest

@@ -4,6 +4,8 @@ services:
     container_name: kairo-server-test
     environment:
       DB_BACKEND: sqlite
+      ENV: development
+      LOG_LEVEL: debug
     volumes:
       - "D:/projects/kairo/data:/usr/src/app/data"
     ports:
