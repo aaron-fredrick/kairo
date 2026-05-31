@@ -34,7 +34,7 @@ jobs:
 
       - name: Build kairo-frontend
         run: |
-          cp infra/docker/frontend.Dockerfile.dockerignore .dockerignore
+          cp infra/docker/frontend.dockerignore .dockerignore
           docker build \
             -f infra/docker/frontend.Dockerfile \
             --target runner \
@@ -42,7 +42,7 @@ jobs:
 
       - name: Build kairo-backend
         run: |
-          cp infra/docker/backend.Dockerfile.dockerignore .dockerignore
+          cp infra/docker/backend.dockerignore .dockerignore
           docker build \
             -f infra/docker/backend.Dockerfile \
             --target backend \
@@ -50,7 +50,7 @@ jobs:
 
       - name: Build kairo-server
         run: |
-          cp infra/docker/server.Dockerfile.dockerignore .dockerignore
+          cp infra/docker/server.dockerignore .dockerignore
           docker build \
             -f infra/docker/server.Dockerfile \
             --target server \
@@ -58,7 +58,7 @@ jobs:
 
       - name: Build kairo-register
         run: |
-          cp infra/docker/register.Dockerfile.dockerignore .dockerignore
+          cp infra/docker/register.dockerignore .dockerignore
           docker build \
             -f infra/docker/register.Dockerfile \
             -t ghcr.io/${{ github.repository_owner }}/kairo-register:${{ github.event.workflow_run.head_branch }} .
