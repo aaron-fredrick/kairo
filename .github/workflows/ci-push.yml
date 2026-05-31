@@ -23,7 +23,7 @@ jobs:
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       run: |
-        npm install --legacy-peer-deps
+        npm ci --legacy-peer-deps
         npm run build
   build-container:
     name: Docker Build
@@ -64,8 +64,8 @@ jobs:
     - name: Install and Run ESLint
       working-directory: ./frontend
       run: |-
-        npm install --legacy-peer-deps
-        npm install eslint @microsoft/eslint-formatter-sarif --no-save --legacy-peer-deps
+        npm ci --legacy-peer-deps
+        npm ci eslint @microsoft/eslint-formatter-sarif --no-save --legacy-peer-deps
         npx eslint . -f @microsoft/eslint-formatter-sarif -o eslint-results.sarif || true
     - uses: github/codeql-action/upload-sarif@v4
       if: hashFiles('frontend/eslint-results.sarif') != ''
@@ -93,7 +93,7 @@ jobs:
     - name: Install and Run Svelte Check
       working-directory: ./frontend
       run: |-
-        npm install --legacy-peer-deps
+        npm ci --legacy-peer-deps
         npx svelte-check || true
   security:
     name: Security Scan (Bandit, Trivy, Audits)

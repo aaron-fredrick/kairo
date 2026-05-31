@@ -51,6 +51,8 @@ frontend/build/
 .env.test.local
 .env.production.local
 
+.dockerignore
+
 # Databases, Cache & Storage
 *.db
 *.sqlite
