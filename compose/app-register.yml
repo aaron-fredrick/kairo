@@ -1,6 +1,8 @@
 # app-register + Caddy (dynamic upstream config).
 # docker compose -f compose/base.yml -f compose/app-register.yml up --build
 
+name: kairo
+
 services:
   app-register:
     build:
@@ -30,3 +32,10 @@ services:
       - app-register
     networks:
       - kairo
+
+networks:
+  kairo:
+    name: kairo
+
+volumes:
+  proxy_config:

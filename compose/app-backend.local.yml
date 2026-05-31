@@ -1,6 +1,8 @@
 # Single app-backend + Caddy on :80 (frontend baked into image).
 # docker compose -f compose/app-backend.local.yml up --build
 
+name: kairo
+
 services:
   app-backend:
     build:
@@ -33,3 +35,7 @@ services:
       - app-backend
     networks:
       - kairo
+
+networks:
+  kairo:
+    name: kairo

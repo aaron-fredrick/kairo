@@ -1,6 +1,8 @@
 # Shared data plane: PostgreSQL, Redis, MinIO (+ bucket init).
 # docker compose -f compose/base.yml -f compose/<profile>.yml up
 
+name: kairo
+
 services:
   postgres:
     image: postgres:15-alpine

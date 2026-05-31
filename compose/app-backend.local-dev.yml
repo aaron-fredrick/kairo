@@ -1,6 +1,8 @@
 # Hot-reload app-backend, Vite frontend (:5173), Caddy :80.
 # docker compose -f compose/app-backend.local-dev.yml up --build
 
+name: kairo
+
 services:
   app-backend:
     build:
@@ -50,3 +52,7 @@ services:
       - frontend
     networks:
       - kairo
+
+networks:
+  kairo:
+    name: kairo

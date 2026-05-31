@@ -1,6 +1,8 @@
 # PostgreSQL only (host :5432).
 # docker compose -f compose/infra.postgresql.yml up
 
+name: kairo
+
 services:
   postgres:
     image: postgres:15-alpine

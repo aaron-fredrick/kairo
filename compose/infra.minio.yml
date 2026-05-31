@@ -1,6 +1,8 @@
 # MinIO + Caddy (isolated object-storage testing).
 # docker compose -f compose/infra.minio.yml up
 
+name: kairo
+
 services:
   minio:
     image: minio/minio

@@ -1,6 +1,8 @@
 # Redis only (host :6379).
 # docker compose -f compose/infra.redis.yml up
 
+name: kairo
+
 services:
   redis:
     image: redis:7-alpine
