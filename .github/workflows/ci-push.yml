@@ -144,7 +144,9 @@ jobs:
       with:
         python-version: '3.12'
     - name: Install dependencies
-      run: pip install -r requirements.txt
+      run:  |-
+        pip install -r requirements.txt
+        pip install coverage pytest pytest-asyncio pytest-cov
     - name: Run Pytest (coverage)
       env:
         ENV: test
