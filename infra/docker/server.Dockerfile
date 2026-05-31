@@ -12,6 +12,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY requirements.txt .
 
+RUN pip install --upgrade pip
+
 # Install into a dedicated folder (clean multi-stage pattern)
 RUN pip install --prefix=/install -r requirements.txt
 
@@ -23,7 +25,6 @@ WORKDIR /usr/src/app
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV PIP_NO_CACHE_DIR=1
 
 # Make installed packages available
 ENV PATH=/install/bin:$PATH
