@@ -16,16 +16,16 @@ run_load_env() {
 }
 
 run_ensure_frontend_deps() {
-  if [[ ! -d frontend/node_modules ]]; then
+  if [[ ! -d src/frontend/node_modules ]]; then
     echo "Installing frontend dependencies..."
-    (cd frontend && npm install --legacy-peer-deps)
+    (cd src/frontend && npm install --legacy-peer-deps)
   fi
 }
 
 run_build_frontend() {
-  if [[ ! -f app_backend/static/index.html ]]; then
-    echo "Building frontend into app_backend/static/ ..."
-    (cd frontend && npm install --legacy-peer-deps && npm run build)
+  if [[ ! -f src/backend/static/index.html ]]; then
+    echo "Building frontend into src/backend/static/ ..."
+    (cd src/frontend && npm install --legacy-peer-deps && npm run build)
   fi
 }
 

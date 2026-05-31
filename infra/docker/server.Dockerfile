@@ -36,7 +36,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY --from=builder /install /install
 
-COPY ./app_backend ./app_backend
+COPY ./src/backend ./src/backend
 COPY ./shared ./shared
 COPY ./config ./config
 
@@ -48,16 +48,16 @@ FROM node:20-alpine AS frontend-builder
 
 WORKDIR /fe
 
-COPY frontend/package.json frontend/package-lock.json* ./
+COPY src/frontend/package.json src/frontend/package-lock.json* ./
 RUN npm ci --legacy-peer-deps
 
-COPY frontend/ ./
+COPY src/frontend/ ./
 RUN npm run build
 
 
 # ---------------- FINAL IMAGE ----------------
 FROM backend AS server
 
-COPY --from=frontend-builder /fe/dist ./app_backend/static
+COPY --from=frontend-builder /fe/dist ./src/backend/static
 
-CMD ["uvicorn", "app_backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+CMD ["uvicorn", "src.backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]

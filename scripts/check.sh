@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Quick project sanity check (no full CI suite).
 #
-#   ./scripts/check.sh           # fast: smoke + shared + app_register unit
-#   ./scripts/check.sh --full      # + app_backend unit/component
+#   ./scripts/check.sh           # fast: smoke + shared + register unit
+#   ./scripts/check.sh --full      # + backend unit/component
 #   ./scripts/check.sh --http      # also curl edge if stack is on :80
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -22,13 +22,13 @@ for arg in "$@"; do
 done
 
 echo "==> Python import check"
-python -c "import app_backend.main; import app_register.main; print('ok: app_backend, app_register')"
+python -c "import src.backend.main; import src.register.main; print('ok: backend, register')"
 
 echo ""
 echo "==> Pytest (quick)"
-PYTEST_ARGS=(tests/app_backend/smoke tests/shared/unit tests/app_register/unit -q --tb=line)
+PYTEST_ARGS=(tests/backend/smoke tests/shared/unit tests/register/unit -q --tb=line)
 if [[ "$FULL" == true ]]; then
-  PYTEST_ARGS=(tests/app_backend tests/app_register tests/shared -m "unit or component or smoke" -q --tb=line)
+  PYTEST_ARGS=(tests/backend tests/register tests/shared -m "unit or component or smoke" -q --tb=line)
 fi
 python -m pytest "${PYTEST_ARGS[@]}"
 

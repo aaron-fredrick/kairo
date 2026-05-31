@@ -11,16 +11,16 @@ $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $Root
 
 Write-Host "==> Python import check"
-python -c "import app_backend.main; import app_register.main; print('ok: app_backend, app_register')"
+python -c "import src.backend.main; import src.register.main; print('ok: backend, register')"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host ""
 Write-Host "==> Pytest (quick)"
 if ($Full) {
-    python -m pytest tests/app_backend tests/app_register tests/shared `
+    python -m pytest tests/backend tests/register tests/shared `
         -m "unit or component or smoke" -q --tb=line
 } else {
-    python -m pytest tests/app_backend/smoke tests/shared/unit tests/app_register/unit `
+    python -m pytest tests/backend/smoke tests/shared/unit tests/register/unit `
         -q --tb=line
 }
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

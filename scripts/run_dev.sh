@@ -25,7 +25,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-(cd frontend && npm run dev) &
+(cd src/frontend && npm run dev) &
 FRONTEND_PID=$!
 
-exec python -m uvicorn app_backend.main:app --host 127.0.0.1 --port 8000 --reload --proxy-headers
+exec python -m uvicorn src.backend.main:app --host 127.0.0.1 --port 8000 --reload --proxy-headers

@@ -4,14 +4,14 @@ REM   scripts\run_dev.bat
 setlocal
 cd /d "%~dp0.."
 
-if not exist "app_backend\main.py" (
+if not exist "src\backend\main.py" (
     echo Error: run from the kairo project root.
     exit /b 1
 )
 
-if not exist "frontend\node_modules\" (
+if not exist "src\frontend\node_modules\" (
     echo Installing frontend dependencies...
-    pushd frontend
+    pushd src\frontend
     call npm install --legacy-peer-deps
     popd
 )
@@ -26,6 +26,6 @@ echo.
 
 if not defined CORS_ORIGINS set CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://127.0.0.1:8000
 
-start "Kairo Vite" cmd /k "cd /d %CD%\frontend && npm run dev"
+start "Kairo Vite" cmd /k "cd /d %CD%\src\frontend && npm run dev"
 
-python -m uvicorn app_backend.main:app --host 127.0.0.1 --port 8000 --reload --proxy-headers
+python -m uvicorn src.backend.main:app --host 127.0.0.1 --port 8000 --reload --proxy-headers

@@ -1,15 +1,15 @@
 [run]
-source = app_backend, app_register
+source = src/backend, src/register
 branch = True
 omit =
     */tests/*
     */migrations/*
-    app_backend/main.py
-    app_backend/services/chat_service.py
-    app_backend/services/presence_service.py
-    app_backend/utils/__init__.py
-    app_backend/storage/backends.py
-    app_backend/db/redis.py
+    src/backend/main.py
+    src/backend/services/chat_service.py
+    src/backend/services/presence_service.py
+    src/backend/utils/__init__.py
+    src/backend/storage/backends.py
+    src/backend/db/redis.py
 
 [report]
 show_missing = True

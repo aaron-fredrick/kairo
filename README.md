@@ -31,8 +31,8 @@ Kairo is a self-hosted, distributed real-time communication platform built for s
 ```
 
 ## Structure
-- `/app_backend` — Chat API (FastAPI): endpoints, models, services, WebSockets, storage.
-- `/app_register` — Service registry and dynamic Caddy/Nginx config (distributed deployments).
+- `/src/backend` — Chat API (FastAPI): endpoints, models, services, WebSockets, storage.
+- `/src/register` — Service registry and dynamic Caddy/Nginx config (distributed deployments).
 - `/shared` — Cross-service utilities (e.g. HMAC auth).
 - `/frontend` — Frontend application source (Svelte/React).
 - `/infra` - Docker Compose and Nginx configuration templates.

@@ -1,8 +1,10 @@
-# Default local stack — see compose/README.md for all profiles.
-#
-#   docker compose up --build
-#   docker compose -f compose/base.yml -f compose/app-backend.local-dev.yml up --build
-
-include:
-  - path: compose/base.yml
-  - path: compose/app-backend.local.yml
+services:
+  kairo-server:
+    image: aaron-fredrick/kairo-server:latest
+    container_name: kairo-server-test
+    environment:
+      DB_BACKEND: sqlite
+    volumes:
+      - "D:/projects/kairo/data:/usr/src/app/data"
+    ports:
+      - "8000:8000"

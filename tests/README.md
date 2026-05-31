@@ -4,13 +4,13 @@ Layout mirrors the main packages:
 
 ```
 tests/
-  app_backend/     # Chat API
+  src/backend/     # Chat API
     unit/
     component/
     integration/
     smoke/
     e2e/
-  app_register/    # Service registry
+  src/register/    # Service registry
     unit/
     component/
   shared/          # Cross-service (e.g. HMAC auth)
@@ -19,10 +19,10 @@ tests/
     unit/
 ```
 
-Markers are applied from directory names (`unit`, `component`, …) and package (`app_backend`, `app_register`, …). See `pytest.ini`.
+Markers are applied from directory names (`unit`, `component`, …) and package (`src/backend`, `src/register`, …). See `pytest.ini`.
 
 ```bash
-pytest tests/app_backend tests/app_register tests/shared
-pytest tests/app_backend -m integration
-pytest tests/app_register -m component
+pytest tests/src/backend tests/src/register tests/shared
+pytest tests/src/backend -m integration
+pytest tests/src/register -m component
 ```

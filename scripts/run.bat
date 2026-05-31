@@ -4,14 +4,14 @@ REM   scripts\run.bat
 setlocal
 cd /d "%~dp0.."
 
-if not exist "app_backend\main.py" (
+if not exist "src\backend\main.py" (
     echo Error: run from the kairo project root.
     exit /b 1
 )
 
-if not exist "app_backend\static\index.html" (
-    echo Building frontend into app_backend\static\ ...
-    pushd frontend
+if not exist "src\backend\static\index.html" (
+    echo Building frontend into src\backend\static\ ...
+    pushd src\frontend
     call npm install --legacy-peer-deps
     call npm run build
     popd
@@ -25,4 +25,4 @@ echo.
 echo Open http://127.0.0.1:8000
 echo.
 
-python -m uvicorn app_backend.main:app --host 127.0.0.1 --port 8000 --proxy-headers
+python -m uvicorn src.backend.main:app --host 127.0.0.1 --port 8000 --proxy-headers

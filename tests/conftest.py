@@ -38,8 +38,8 @@ _MARKER_BY_DIR = {
 }
 
 _PRODUCT_BY_DIR = {
-    "app_backend": pytest.mark.app_backend,
-    "app_register": pytest.mark.app_register,
+    "backend": pytest.mark.backend,
+    "register": pytest.mark.register,
     "frontend": pytest.mark.frontend,
     "shared": pytest.mark.shared,
 }
@@ -61,8 +61,8 @@ def _init_test_database():
     """Create app-backend schema once per session (SQLite file)."""
     import asyncio
 
-    from app_backend.db.database import AsyncSessionLocal, Base, engine
-    from app_backend.services.admin_service import admin_service
+    from src.backend.db.database import AsyncSessionLocal, Base, engine
+    from src.backend.services.admin_service import admin_service
 
     async def _setup():
         await engine.dispose()
@@ -104,7 +104,7 @@ def client():
     """FastAPI TestClient for app-backend (session-scoped)."""
     from fastapi.testclient import TestClient
 
-    from app_backend.main import app
+    from src.backend.main import app
 
     with TestClient(app) as test_client:
         yield test_client

@@ -15,4 +15,4 @@ run_build_frontend
 echo "Open http://127.0.0.1:8000"
 echo ""
 
-exec python -m uvicorn app_backend.main:app --host 127.0.0.1 --port 8000 --proxy-headers
+exec python -m uvicorn src.backend.main:app --host 127.0.0.1 --port 8000 --proxy-headers

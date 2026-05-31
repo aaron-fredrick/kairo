@@ -79,7 +79,7 @@ jobs:
       with:
         python-version: '3.12'
     - run: pip install mypy
-    - run: mypy app_backend/ app_register/ shared/ || true
+    - run: mypy src/backend/ src/register/ shared/ || true
   static-frontend:
     name: Static Analysis Frontend (Svelte Check)
     runs-on: ubuntu-latest
@@ -114,7 +114,7 @@ jobs:
     - name: Bandit
       run: |-
         pip install "bandit[sarif]"
-        bandit -r app_backend/ app_register/ shared/ -f sarif -o bandit-results.sarif
+        bandit -r src/backend/ src/register/ shared/ -f sarif -o bandit-results.sarif
       continue-on-error: true
     - uses: github/codeql-action/upload-sarif@v4
       with:
@@ -157,11 +157,11 @@ jobs:
       run: |-
         mkdir -p data/test
         rm -f data/test/ci-pytest.db
-        pytest tests/app_backend tests/app_register tests/shared -m "unit or component" \
-          --cov=app_backend --cov=app_register --cov-config=.coveragerc --cov-report=xml:coverage.xml \
+        pytest tests/backend tests/register tests/shared -m "unit or component" \
+          --cov=src/backend --cov=src/register --cov-config=.coveragerc --cov-report=xml:coverage.xml \
           --junitxml=junit-unit-component.xml -v
-        pytest tests/app_backend -m integration \
-          --cov=app_backend --cov-config=.coveragerc --cov-append --cov-report=xml:coverage.xml \
+        pytest tests/backend -m integration \
+          --cov=src/backend --cov-config=.coveragerc --cov-append --cov-report=xml:coverage.xml \
           --junitxml=junit-integration.xml -v
     - name: Upload coverage to Codecov
       if: success()
@@ -184,18 +184,18 @@ jobs:
         ADMIN_PASSWORD: admin
         DATA_DIR: data/test
       run: |-
-        pytest tests/app_backend -m smoke --junitxml=junit-smoke.xml -v
-        pytest tests/app_backend -m e2e --junitxml=junit-e2e.xml -v
-        pytest tests/app_backend -m regression --junitxml=junit-regression.xml -v || true
-        pytest tests/app_backend -m functional --junitxml=junit-functional.xml -v || true
-        pytest tests/app_backend -m contract --junitxml=junit-contract.xml -v || true
-        pytest tests/app_backend -m acceptance --junitxml=junit-acceptance.xml -v || true
-        pytest tests/app_backend -m load --junitxml=junit-load.xml -v || true
-        pytest tests/app_backend -m stress --junitxml=junit-stress.xml -v || true
-        pytest tests/app_backend -m spike --junitxml=junit-spike.xml -v || true
-        pytest tests/app_backend -m soak --junitxml=junit-soak.xml -v || true
-        pytest tests/app_backend -m chaos --junitxml=junit-chaos.xml -v || true
-        pytest tests/app_backend -m mutation --junitxml=junit-mutation.xml -v || true
+        pytest tests/backend -m smoke --junitxml=junit-smoke.xml -v
+        pytest tests/backend -m e2e --junitxml=junit-e2e.xml -v
+        pytest tests/backend -m regression --junitxml=junit-regression.xml -v || true
+        pytest tests/backend -m functional --junitxml=junit-functional.xml -v || true
+        pytest tests/backend -m contract --junitxml=junit-contract.xml -v || true
+        pytest tests/backend -m acceptance --junitxml=junit-acceptance.xml -v || true
+        pytest tests/backend -m load --junitxml=junit-load.xml -v || true
+        pytest tests/backend -m stress --junitxml=junit-stress.xml -v || true
+        pytest tests/backend -m spike --junitxml=junit-spike.xml -v || true
+        pytest tests/backend -m soak --junitxml=junit-soak.xml -v || true
+        pytest tests/backend -m chaos --junitxml=junit-chaos.xml -v || true
+        pytest tests/backend -m mutation --junitxml=junit-mutation.xml -v || true
     - name: Upload test results to Codecov
       if: success()
       uses: codecov/codecov-action@v5

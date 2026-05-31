@@ -27,9 +27,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY .env* ./
 COPY ./shared ./shared
-COPY ./app_backend ./app_backend
+COPY ./src/backend ./src/backend
 COPY ./config ./config
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app_backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+CMD ["uvicorn", "src.backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]

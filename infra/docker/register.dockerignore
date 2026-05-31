@@ -35,10 +35,10 @@ venv/
 .venv/
 
 # App backend (not needed for register service)
-app_backend/
+src/backend/
 
 # Frontend (not needed for register service)
-frontend/
+src/frontend/
 
 # Data and SQLite
 data/

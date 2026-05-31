@@ -3,14 +3,14 @@
 #   Equivalent to compose profile: local
 Set-Location (Join-Path $PSScriptRoot "..")
 
-if (-not (Test-Path "app_backend\main.py")) {
+if (-not (Test-Path "src\backend\main.py")) {
     Write-Error "Error: run from the kairo project root."
     exit 1
 }
 
-if (-not (Test-Path "app_backend\static\index.html")) {
-    Write-Host "Building frontend into app_backend\static\ ..."
-    Push-Location frontend
+if (-not (Test-Path "src\backend\static\index.html")) {
+    Write-Host "Building frontend into src\backend\static\ ..."
+    Push-Location src\frontend
     npm install --legacy-peer-deps
     npm run build
     Pop-Location
@@ -24,4 +24,4 @@ Write-Host ""
 Write-Host "Open http://127.0.0.1:8000"
 Write-Host ""
 
-& python -m uvicorn app_backend.main:app --host 127.0.0.1 --port 8000 --proxy-headers
+& python -m uvicorn src.backend.main:app --host 127.0.0.1 --port 8000 --proxy-headers

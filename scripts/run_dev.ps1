@@ -3,14 +3,14 @@
 #   Equivalent to compose profile: local-dev
 Set-Location (Join-Path $PSScriptRoot "..")
 
-if (-not (Test-Path "app_backend\main.py")) {
+if (-not (Test-Path "src\backend\main.py")) {
     Write-Error "Error: run from the kairo project root."
     exit 1
 }
 
-if (-not (Test-Path "frontend\node_modules")) {
+if (-not (Test-Path "src\frontend\node_modules")) {
     Write-Host "Installing frontend dependencies..."
-    Push-Location frontend
+    Push-Location src\frontend
     npm install --legacy-peer-deps
     Pop-Location
 }
@@ -27,10 +27,10 @@ Write-Host "API:      http://127.0.0.1:8000  (reload)"
 Write-Host "Frontend: http://127.0.0.1:5173  (Vite)"
 Write-Host ""
 
-$vite = Start-Process -FilePath "npm" -ArgumentList "run", "dev" -WorkingDirectory (Resolve-Path "frontend") -PassThru -NoNewWindow
+$vite = Start-Process -FilePath "npm" -ArgumentList "run", "dev" -WorkingDirectory (Resolve-Path "src\frontend") -PassThru -NoNewWindow
 
 try {
-    & python -m uvicorn app_backend.main:app --host 127.0.0.1 --port 8000 --reload --proxy-headers
+    & python -m uvicorn src.backend.main:app --host 127.0.0.1 --port 8000 --reload --proxy-headers
 } finally {
     if (-not $vite.HasExited) { $vite.Kill() }
 }

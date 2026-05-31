@@ -35,7 +35,7 @@ venv/
 .venv/
 
 # Frontend (not needed in backend-only image)
-frontend/
+src/frontend/
 
 # Data and SQLite
 data/

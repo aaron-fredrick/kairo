@@ -14,8 +14,8 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 COPY shared ./shared
-COPY app_register ./app_register
+COPY src/register ./src/register
 
 EXPOSE 8100
 
-CMD ["uvicorn", "app_register.main:app", "--host", "0.0.0.0", "--port", "8100"]
+CMD ["uvicorn", "src.register.main:app", "--host", "0.0.0.0", "--port", "8100"]

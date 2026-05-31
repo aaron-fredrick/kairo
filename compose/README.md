@@ -45,7 +45,7 @@ docker compose -f compose/base.yml -f compose/app-backend.workers.yml up --build
 docker compose -f compose/stack.distributed.yml up --build --scale app-backend=2
 ```
 
-See [app_register/ARCHITECTURE.md](../app_register/ARCHITECTURE.md) for the register service design.
+See [src/register/ARCHITECTURE.md](../src/register/ARCHITECTURE.md) for the register service design.
 
 ## Security
 

@@ -11,8 +11,8 @@ The system is composed of three primary layers:
 
 ## Components
 
-### 1. Application Server (`app_backend`, FastAPI)
-The chat API lives in **`app_backend/`**. It is stateless, allowing multiple instances to run concurrently behind a load balancer (Caddy/Nginx). 
+### 1. Application Server (`src/backend`, FastAPI)
+The chat API lives in **`src/backend/`**. It is stateless, allowing multiple instances to run concurrently behind a load balancer (Caddy/Nginx). 
 
 * **REST API**: Handles authentication (`/auth`), room management (`/rooms`), and user queries (`/users`).
 * **WebSocket Manager**: Manages active connections. When a message is received, it validates it and publishes it to the Redis Event Bus.
@@ -26,12 +26,12 @@ The chat API lives in **`app_backend/`**. It is stateless, allowing multiple ins
 * **Migrations**: Managed via Alembic.
 * Acts as the ultimate source of truth for historical message retrieval.
 
-### 4. Register Server (`app_register`, optional, distributed mode)
+### 4. Register Server (`src/register`, optional, distributed mode)
 * **Purpose**: Tracks healthy app server instances and rewrites **Caddy** or **Nginx** upstream configuration.
 * **Registration**: Each app node calls `POST /api/v1/register` on startup with HMAC auth (`REGISTER_SYSTEM_KEY`).
 * **Heartbeats**: Periodic `POST /api/v1/heartbeat/{server_id}` using a per-server secret; stale nodes are removed from the load balancer.
 * **Shared state**: App nodes still require shared **PostgreSQL**, **Redis**, and **MinIO/S3** for data and blobs.
-* **Architecture**: Layered design (domain → ports → adapters → coordinator → API). See [app_register/ARCHITECTURE.md](app_register/ARCHITECTURE.md) for flows, security, and extension points.
+* **Architecture**: Layered design (domain → ports → adapters → coordinator → API). See [src/register/ARCHITECTURE.md](src/register/ARCHITECTURE.md) for flows, security, and extension points.
 
 ## Data Flow
 

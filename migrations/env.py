@@ -5,10 +5,10 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 
 # Import our configuration settings and base model metadata
-from app_backend.core.config import settings
-from app_backend.db.database import Base
+from src.backend.core.config import settings
+from src.backend.db.database import Base
 # Make sure models are loaded before metadata to ensure autogenerate works
-import app_backend.models  # noqa
+import src.backend.models  # noqa
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
