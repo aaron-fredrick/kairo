@@ -1,7 +1,4 @@
 import structlog
-from fastapi import FastAPI
-from prometheus_client import make_asgi_app
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 import logging
 import sys
 
@@ -28,17 +25,3 @@ def setup_logging():
         wrapper_class=structlog.stdlib.BoundLogger,
         cache_logger_on_first_use=True,
     )
-
-def setup_metrics(app: FastAPI):
-    # Add prometheus asgi middleware to route /metrics
-    metrics_app = make_asgi_app()
-    app.mount("/metrics", metrics_app)
-
-def setup_tracing(app: FastAPI):
-    # Setup OpenTelemetry
-    FastAPIInstrumentor.instrument_app(app)
-
-def setup_observability(app: FastAPI):
-    setup_logging()
-    setup_metrics(app)
-    setup_tracing(app)

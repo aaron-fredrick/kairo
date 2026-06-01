@@ -9,7 +9,7 @@ from app.core.config import settings
 from app.db.database import check_db_connection
 from app.core.redis import check_redis_connection
 from app.core.storage import check_storage_connection
-from app.core.observability import setup_observability
+from app.observability import setup_metrics, setup_tracing, setup_logging
 from packages.backend_core.schemas.observability import HealthCheckResponse
 
 logger = structlog.get_logger(__name__)
@@ -50,7 +50,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-setup_observability(app)
+setup_metrics(app)
+setup_tracing(app)
+setup_logging()
 
 @app.get("/api/health", response_model=HealthCheckResponse, tags=["Observability"])
 async def health_check():
