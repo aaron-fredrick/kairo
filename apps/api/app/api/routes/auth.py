@@ -44,3 +44,17 @@ async def get_me(
     Get current logged in user profile.
     """
     return await mediator.get_current_user_profile(user_id)
+
+@router.post("/join")
+async def anonymous_join(
+    mediator: AuthMediator = Depends(get_auth_mediator)
+):
+    """
+    Register an anonymous user and immediately return token and user details.
+    """
+    from app.schemas.auth import UserRegister
+    # register_user handles empty username by generating anonymous user
+    user = await mediator.register_user(UserRegister())
+    # We need the token. However, auth_mediator.register_user doesn't return the raw password.
+    # To fix this, we should add an explicit join method to the mediator.
+    return await mediator.anonymous_join()

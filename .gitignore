@@ -43,7 +43,10 @@ frontend/dist/
 frontend/.svelte-kit/
 frontend/build/
 frontend/coverage/
-/app_backend/static/
+apps/web/coverage/
+apps/web/dist/
+apps/web/.svelte-kit/
+
 
 # Local Dev/Environment
 .env
