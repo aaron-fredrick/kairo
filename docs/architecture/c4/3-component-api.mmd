@@ -1,0 +1,85 @@
+%%{init: {
+  "theme": "dark",
+  "flowchart": {
+    "nodeSpacing": 50,
+    "rankSpacing": 60
+  }
+}}%%
+
+flowchart TD
+
+    subgraph API[API Service]
+
+        %% Base
+        Router["API Router (FastAPI)"]
+
+        %% Routes (presentation layer)
+        AuthRoute[Auth Route]
+        RoomRoute[Room Route]
+        MessageRoute[Message Route]
+        AttachmentRoute[Attachment Route]
+        PresenceRoute[Presence Route]
+
+        %% Services (business logic layer)
+        AuthMediator["Auth Mediator"]
+        RoomMediator["Room Mediator"]
+        MessageMediator["Message Mediator"]
+        AttachmentMediator["Attachment Mediator"]
+        PresenceMediator["Presence Mediator"]
+
+        %% Repositories (data access layer)
+        UserRepo["User Repository"]
+        RoomRepo["Room Repository"]
+        MessageRepo["Message Repository"]
+        AttachmentRepo["Attachment Repository"]
+
+        %% DB
+        DBEngine["Database Engine (SQLAlchemy)"]
+
+        %% Core
+        Security["Security (JWT, OAuth)"]
+
+        RedisClient["Redis Client (redis-py)"]
+        StorageClient["Storage Client (boto3)"]
+
+        Health[Health Check Endpoint]
+
+    end
+
+    Postgres[(PostgreSQL)]
+    Redis[(Redis)]
+    Storage[(Object Storage - S3/MinIO)]
+
+    Router --> AuthRoute
+    Router --> RoomRoute
+    Router --> MessageRoute
+    Router --> AttachmentRoute
+    Router --> PresenceRoute
+
+    AuthRoute --> AuthMediator
+    RoomRoute --> RoomMediator
+    MessageRoute --> MessageMediator
+    AttachmentRoute --> AttachmentMediator
+    PresenceRoute --> PresenceMediator
+
+    AuthMediator --> Security
+
+    AuthMediator --> UserRepo
+    RoomMediator --> RoomRepo
+    MessageMediator --> MessageRepo
+    AttachmentMediator --> AttachmentRepo
+    PresenceMediator --> UserRepo
+
+    AttachmentMediator --> StorageClient
+    AttachmentMediator --> RedisClient
+
+    UserRepo --> DBEngine
+    RoomRepo --> DBEngine
+    MessageRepo --> DBEngine
+    AttachmentRepo --> DBEngine
+
+    DBEngine --> Postgres
+
+    RedisClient --> Redis
+
+    StorageClient --> Storage

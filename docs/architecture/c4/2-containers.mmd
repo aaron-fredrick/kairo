@@ -1,3 +1,11 @@
+%%{init: {
+  "theme": "dark",
+  "flowchart": {
+    "nodeSpacing": 50,
+    "rankSpacing": 60
+  }
+}}%%
+
 flowchart LR
 
 	%% Actors (outside system boundary conceptually)
@@ -16,7 +24,7 @@ flowchart LR
 		Blob_Worker[Blob Worker Service]
 		Thumb_Worker[Thumbnail Worker Service]
 
-		Redis[(Redis Cache / Event Bus)]
+		Redis[(Redis)]
 		Postgres[(PostgreSQL)]
 		Storage[(Object Storage - S3/MinIO)]
 
@@ -48,6 +56,7 @@ flowchart LR
 	Blob_Worker -->|"XREADGROUP (blob-workers-group)"| Redis
 	Blob_Worker -->|Redis XADD Streams| Redis
 	Blob_Worker -->|S3 API| Storage
+    Blob_Worker -->|SQL| Postgres
 
 	Thumb_Worker -->|"XREADGROUP (thumbnail-workers-group)"| Redis
 	Thumb_Worker -->|Redis Pub/Sub| Redis

@@ -1,6 +1,6 @@
 from typing import Dict, Literal
 from uuid import UUID
-from pydantic import Field
+from pydantic import Field, BaseModel
 
 from .common import APIBaseSchema
 
@@ -22,3 +22,12 @@ class AttachmentResponse(APIBaseSchema):
     size_bytes: int
     download_url: str
     thumbnails: Dict[ThumbnailSize, str] = Field(default_factory=dict)
+    
+
+class UploadResponse(BaseModel):
+    upload_id: str
+    status: str
+    message: str
+
+class DownloadUrlResponse(BaseModel):
+    url: str
