@@ -1,0 +1,71 @@
+flowchart LR
+
+	%% Actors (outside system boundary conceptually)
+	User[User]
+
+	%% System boundary containers
+	subgraph Kairo[Kairo System]
+
+		Edge["Edge Container (Nginx Reverse Proxy)"]
+
+		Web[Web Frontend - Nginx Static]
+		API[API Service]
+		WS[WebSocket Service]
+
+		DB_Worker[DB Worker Service]
+		Blob_Worker[Blob Worker Service]
+		Thumb_Worker[Thumbnail Worker Service]
+
+		Redis[(Redis Cache / Event Bus)]
+		Postgres[(PostgreSQL)]
+		Storage[(Object Storage - S3/MinIO)]
+
+		LogAgent["Log Agent (Promtail)"]
+
+		CP["Control Plane (Prometheus, Grafana, Loki)"]
+	end
+
+	User -->|HTTP| Edge
+	User <-->|WebScocket| Edge
+
+	Edge -->|HTTP| Web
+	Edge -->|HTTP| API
+	Edge <-->|WebScocket| WS
+
+	API -->|SQL| Postgres
+	API -->|Redis Pub/Sub| Redis
+	API -->|Redis XADD Streams| Redis
+	API -->|S3 API| Storage
+
+	WS -->|Redis Pub/Sub| Redis
+	WS -->|Redis XADD Streams| Redis
+	WS -->|SQL| Postgres
+
+	DB_Worker -->|SQL| Postgres
+	DB_Worker -->|"XREADGROUP (db-workers-group)"| Redis
+
+
+	Blob_Worker -->|"XREADGROUP (blob-workers-group)"| Redis
+	Blob_Worker -->|Redis XADD Streams| Redis
+	Blob_Worker -->|S3 API| Storage
+
+	Thumb_Worker -->|"XREADGROUP (thumbnail-workers-group)"| Redis
+	Thumb_Worker -->|Redis Pub/Sub| Redis
+	Thumb_Worker -->|S3 API| Storage
+
+	%% Control Plane connections (monitoring)
+	CP -->|Prometheus Metrics| Web
+	CP -->|Prometheus Metrics| API
+	CP -->|Prometheus Metrics| WS
+	CP -->|Prometheus Metrics| DB_Worker
+	CP -->|Prometheus Metrics| Blob_Worker
+	CP -->|Prometheus Metrics| Thumb_Worker
+
+	Web -->|stdout logs| LogAgent
+	API -->|stdout logs| LogAgent
+	WS -->|stdout logs| LogAgent
+	DB_Worker -->|stdout logs| LogAgent
+	Blob_Worker -->|stdout logs| LogAgent
+	Thumb_Worker -->|stdout logs| LogAgent
+
+	LogAgent -->|Loki Logs| CP

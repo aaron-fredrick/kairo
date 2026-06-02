@@ -9,8 +9,11 @@ from app.core.config import settings
 from app.db.database import check_db_connection
 from app.core.redis import check_redis_connection
 from app.core.storage import check_storage_connection
-from app.observability import setup_metrics, setup_tracing, setup_logging
-from packages.backend_core.schemas.observability import HealthCheckResponse
+from app import observability
+
+# Include routers
+from app.api.router import api_router
+from app.core.health import health_router
 
 logger = structlog.get_logger(__name__)
 
@@ -50,23 +53,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-setup_metrics(app)
-setup_tracing(app)
-setup_logging()
-
-@app.get("/api/health", response_model=HealthCheckResponse, tags=["Observability"])
-async def health_check():
-    """Health checking endpoint returning proper response."""
-    # Since lifespan checks passed, we return OK, but could actively check here
-    return HealthCheckResponse(
-        status="ok",
-        version="0.1.0",
-        services={
-            "database": "connected",
-            "redis": "connected",
-            "storage": "connected"
-        }
-    )
+observability.setup(app)
 
 # Exception handlers
 @app.exception_handler(Exception)
@@ -77,7 +64,6 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"detail": "Internal Server Error"}
     )
 
-# Include routers
-from app.api.router import api_router
 
 app.include_router(api_router)
+app.include_router(health_router)
