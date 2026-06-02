@@ -13,25 +13,42 @@ flowchart TD
         %% Base
         Router["API Router (FastAPI)"]
 
-        %% Routes (presentation layer)
-        AuthRoute[Auth Route]
-        RoomRoute[Room Route]
-        MessageRoute[Message Route]
-        AttachmentRoute[Attachment Route]
-        PresenceRoute[Presence Route]
+        subgraph AuthModule[Authentication Module]
+            direction TB
+            AuthRoute[Auth Route]
+            AuthMediator["Auth Mediator"]
+            AuthRepo["Auth Repository"]
+        end
 
-        %% Services (business logic layer)
-        AuthMediator["Auth Mediator"]
-        RoomMediator["Room Mediator"]
-        MessageMediator["Message Mediator"]
-        AttachmentMediator["Attachment Mediator"]
-        PresenceMediator["Presence Mediator"]
+        subgraph RoomModule[Room Management Module]
+            direction TB
+            RoomRoute[Room Route]
+            RoomMediator["Room Mediator"]
+            RoomRepo["Room Repository"]
+        end
 
-        %% Repositories (data access layer)
+        subgraph MessageModule[Messaging Module]
+            direction TB
+            MessageRoute[Message Route]
+            MessageMediator["Message Mediator"]
+            MessageRepo["Message Repository"]
+        end
+
+        subgraph AttachmentModule[Attachment Module]
+            direction TB
+            AttachmentRoute[Attachment Route]
+            AttachmentMediator["Attachment Mediator"]
+            AttachmentRepo["Attachment Repository"]
+        end
+
+        subgraph PresenceModule[Presence Module]
+            direction TB
+            PresenceRoute[Presence Route]
+            PresenceMediator["Presence Mediator"]
+            PresenceRepo["Presence Repository"]
+        end
+        
         UserRepo["User Repository"]
-        RoomRepo["Room Repository"]
-        MessageRepo["Message Repository"]
-        AttachmentRepo["Attachment Repository"]
 
         %% DB
         DBEngine["Database Engine (SQLAlchemy)"]
@@ -42,13 +59,26 @@ flowchart TD
         RedisClient["Redis Client (redis-py)"]
         StorageClient["Storage Client (boto3)"]
 
+        %% platform
+        Logging[Logging System]
+        Metrics[Prometheus Metrics Client]
+        Tracing[Tracing Instrumentation]
+
         Health[Health Check Endpoint]
 
+    end
+
+    subgraph CP[Control Plane]
+        Prometheus[(Prometheus)]
+        Loki[(Loki)]
+        Tempo[(Tempo)]
     end
 
     Postgres[(PostgreSQL)]
     Redis[(Redis)]
     Storage[(Object Storage - S3/MinIO)]
+
+    
 
     Router --> AuthRoute
     Router --> RoomRoute
@@ -64,22 +94,29 @@ flowchart TD
 
     AuthMediator --> Security
 
-    AuthMediator --> UserRepo
+    AuthMediator --> AuthRepo
     RoomMediator --> RoomRepo
     MessageMediator --> MessageRepo
     AttachmentMediator --> AttachmentRepo
-    PresenceMediator --> UserRepo
+    PresenceMediator --> PresenceRepo
 
     AttachmentMediator --> StorageClient
     AttachmentMediator --> RedisClient
 
-    UserRepo --> DBEngine
+    AuthRepo --> DBEngine
     RoomRepo --> DBEngine
     MessageRepo --> DBEngine
     AttachmentRepo --> DBEngine
+    PresenceRepo --> DBEngine
 
     DBEngine --> Postgres
 
     RedisClient --> Redis
 
     StorageClient --> Storage
+
+    Router --> Health
+
+    Logging --> Loki
+    Metrics --> Prometheus
+    Tracing --> Tempo

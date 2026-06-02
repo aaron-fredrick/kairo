@@ -16,21 +16,28 @@ flowchart LR
 
 		Edge["Edge Container (Nginx Reverse Proxy)"]
 
-		Web[Web Frontend - Nginx Static]
-		API[API Service]
-		WS[WebSocket Service]
+		subgraph Apps[Application Services]
+			Web[Web Frontend - Nginx Static]
+			API[API Service]
+			WS[WebSocket Service]
 
-		DB_Worker[DB Worker Service]
-		Blob_Worker[Blob Worker Service]
-		Thumb_Worker[Thumbnail Worker Service]
+			DB_Worker[DB Worker Service]
+			Blob_Worker[Blob Worker Service]
+			Thumb_Worker[Thumbnail Worker Service]
+		end
 
 		Redis[(Redis)]
 		Postgres[(PostgreSQL)]
 		Storage[(Object Storage - S3/MinIO)]
 
-		LogAgent["Log Agent (Promtail)"]
+		OTEL[OpenTelemetry Collector]
 
-		CP["Control Plane (Prometheus, Grafana, Loki)"]
+		subgraph CP[Control Plane]
+			Prometheus[(Prometheus)]
+			Grafana[(Grafana)]
+			Loki[(Loki)]
+			Tempo[(Tempo)]
+		end
 	end
 
 	User -->|HTTP| Edge
@@ -63,18 +70,33 @@ flowchart LR
 	Thumb_Worker -->|S3 API| Storage
 
 	%% Control Plane connections (monitoring)
-	CP -->|Prometheus Metrics| Web
-	CP -->|Prometheus Metrics| API
-	CP -->|Prometheus Metrics| WS
-	CP -->|Prometheus Metrics| DB_Worker
-	CP -->|Prometheus Metrics| Blob_Worker
-	CP -->|Prometheus Metrics| Thumb_Worker
+	OTEL -->|Prometheus Metrics| Web
+	OTEL -->|Prometheus Metrics| API
+	OTEL -->|Prometheus Metrics| WS
+	OTEL -->|Prometheus Metrics| DB_Worker
+	OTEL -->|Prometheus Metrics| Blob_Worker
+	OTEL -->|Prometheus Metrics| Thumb_Worker
 
-	Web -->|stdout logs| LogAgent
-	API -->|stdout logs| LogAgent
-	WS -->|stdout logs| LogAgent
-	DB_Worker -->|stdout logs| LogAgent
-	Blob_Worker -->|stdout logs| LogAgent
-	Thumb_Worker -->|stdout logs| LogAgent
+	Prometheus -->|Scrape Metrics| OTEL
 
-	LogAgent -->|Loki Logs| CP
+	Web -->|stdout logs| OTEL
+	API -->|stdout logs| OTEL
+	WS -->|stdout logs| OTEL
+	DB_Worker -->|stdout logs| OTEL
+	Blob_Worker -->|stdout logs| OTEL
+	Thumb_Worker -->|stdout logs| OTEL
+
+	Web -->|OTLP Metrics/Traces| OTEL
+	API -->|OTLP Metrics/Traces| OTEL
+	WS -->|OTLP Metrics/Traces| OTEL
+	DB_Worker -->|OTLP Metrics/Traces| OTEL
+	Blob_Worker -->|OTLP Metrics/Traces| OTEL
+	Thumb_Worker -->|OTLP Metrics/Traces| OTEL
+
+	OTEL -->Tempo
+
+	OTEL -->|Loki Logs| Loki
+
+	Grafana -->|Query Metrics| Prometheus
+	Grafana -->|Query Logs| Loki
+	Grafana -->|Query Traces| Tempo
