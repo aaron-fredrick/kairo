@@ -53,6 +53,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.middleware("http")(observability.middleware.metrics_middleware)
+
 observability.setup(app)
 
 # Exception handlers

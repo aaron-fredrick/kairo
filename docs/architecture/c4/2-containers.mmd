@@ -100,3 +100,6 @@ flowchart LR
 	Grafana -->|Query Metrics| Prometheus
 	Grafana -->|Query Logs| Loki
 	Grafana -->|Query Traces| Tempo
+
+	Tempo -->|Tempo Bucket| Storage
+	Loki -->|Loki Bucket| Storage
