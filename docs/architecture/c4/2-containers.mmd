@@ -70,31 +70,31 @@ flowchart LR
 	Thumb_Worker -->|Redis Pub/Sub| Redis
 	Thumb_Worker -->|S3 API| Storage
 
-	%% Control Plane connections (monitoring)
-	OTEL -->|Prometheus Metrics| Web
-	OTEL -->|Prometheus Metrics| API
-	OTEL -->|Prometheus Metrics| WS
-	OTEL -->|Prometheus Metrics| DB_Worker
-	OTEL -->|Prometheus Metrics| Blob_Worker
-	OTEL -->|Prometheus Metrics| Thumb_Worker
+	%% Control Plane connections (monitoring)	
+	Web -->|Metrics| OTEL
+	API -->|Metrics| OTEL
+	WS -->|Metrics| OTEL
+	DB_Worker -->|Metrics| OTEL
+	Blob_Worker -->|Metrics| OTEL
+	Thumb_Worker -->|Metrics| OTEL
+
+	Web -->|Logs| OTEL
+	API -->|Logs| OTEL
+	WS -->|Logs| OTEL
+	DB_Worker -->|Logs| OTEL
+	Blob_Worker -->|Logs| OTEL
+	Thumb_Worker -->|Logs| OTEL
+
+	Web -->|Traces| OTEL
+	API -->|Traces| OTEL
+	WS -->|Traces| OTEL
+	DB_Worker -->|Traces| OTEL
+	Blob_Worker -->|Traces| OTEL
+	Thumb_Worker -->|Traces| OTEL
 
 	Prometheus -->|Scrape Metrics| OTEL
 
-	Web -->|stdout logs| OTEL
-	API -->|stdout logs| OTEL
-	WS -->|stdout logs| OTEL
-	DB_Worker -->|stdout logs| OTEL
-	Blob_Worker -->|stdout logs| OTEL
-	Thumb_Worker -->|stdout logs| OTEL
-
-	Web -->|OTLP Metrics/Traces| OTEL
-	API -->|OTLP Metrics/Traces| OTEL
-	WS -->|OTLP Metrics/Traces| OTEL
-	DB_Worker -->|OTLP Metrics/Traces| OTEL
-	Blob_Worker -->|OTLP Metrics/Traces| OTEL
-	Thumb_Worker -->|OTLP Metrics/Traces| OTEL
-
-	OTEL -->Tempo
+	OTEL -->|Tempo Traces| Tempo
 
 	OTEL -->|Loki Logs| Loki
 
