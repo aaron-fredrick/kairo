@@ -1,0 +1,245 @@
+version: "3.9"
+
+services:
+
+  # =========================
+  # EDGE (NGINX REVERSE PROXY)
+  # =========================
+  edge:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    configs:
+      - source: nginx_config
+        target: /etc/nginx/nginx.conf
+    depends_on:
+      - web
+      - api
+      - ws
+    networks:
+      - kairo_net
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+
+
+  # =========================
+  # FRONTEND WEB (VITE + NGINX)
+  # =========================
+  web:
+    image: kairo/web:latest
+    networks:
+      - kairo_net
+    deploy:
+      replicas: 3
+
+
+  # =========================
+  # API SERVICE
+  # =========================
+  api:
+    image: kairo/api:latest
+    environment:
+      - DATABASE_URL=postgresql://kairo_api:kairo_api_password@postgres:5432/kairo
+      - REDIS_URL=redis://redis:6379
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel:4318
+    networks:
+      - kairo_net
+    deploy:
+      replicas: 4
+
+
+  # =========================
+  # WEBSOCKETS SERVICE
+  # =========================
+  ws:
+    image: kairo/ws:latest
+    environment:
+      - DATABASE_URL=postgresql://kairo_ws:kairo_ws_password@postgres:5432/kairo
+      - REDIS_URL=redis://redis:6379
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel:4318
+    networks:
+      - kairo_net
+    deploy:
+      replicas: 2
+
+
+  # =========================
+  # WORKERS
+  # =========================
+
+  worker_db:
+    image: kairo/worker-db:latest
+    environment:
+      - DATABASE_URL=postgresql://kairo_db:kairo_db_password@postgres:5432/kairo
+      - REDIS_URL=redis://redis:6379
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel:4318
+    networks:
+      - kairo_net
+    deploy:
+      replicas: 2
+
+
+  worker_thumbnail:
+    image: kairo/worker-thumbnail:latest
+    environment:
+      - DATABASE_URL=postgresql://kairo_thumbnail:kairo_thumbnail_password@postgres:5432/kairo
+      - REDIS_URL=redis://redis:6379
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel:4318
+    networks:
+      - kairo_net
+    deploy:
+      replicas: 2
+
+
+  worker_blob:
+    image: kairo/worker-blob:latest
+    environment:
+      - DATABASE_URL=postgresql://kairo_blob:kairo_blob_password@postgres:5432/kairo
+      - STORAGE_ENDPOINT=http://storage:9000
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel:4318
+    networks:
+      - kairo_net
+    deploy:
+      replicas: 2
+
+
+  # =========================
+  # REDIS (EVENT BUS)
+  # =========================
+  redis:
+    image: redis:7-alpine
+    networks:
+      - kairo_net
+    deploy:
+      replicas: 1
+
+
+  # =========================
+  # POSTGRES (PRIMARY DB)
+  # =========================
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: kairo
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: kairo
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - kairo_net
+    deploy:
+      replicas: 1
+
+
+  # =========================
+  # OBJECT STORAGE (MINIO / S3)
+  # =========================
+  storage:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: kairo
+      MINIO_ROOT_PASSWORD: password
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio:/data
+    networks:
+      - kairo_net
+    deploy:
+      replicas: 1
+
+
+  # =========================
+  # OPEN TELEMETRY COLLECTOR
+  # =========================
+  otel:
+    image: otel/opentelemetry-collector-contrib:latest
+    command: ["--config=/etc/otel.yaml"]
+    volumes:
+      - ./otel.yaml:/etc/otel.yaml
+    networks:
+      - kairo_net
+    deploy:
+      replicas: 1
+
+
+  # =========================
+  # PROMETHEUS
+  # =========================
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - kairo_net
+    deploy:
+      replicas: 1 # can be many, with shared storage for TSDB or other advanced setups
+
+
+  # =========================
+  # LOKI (LOGS)
+  # =========================
+  loki:
+    image: grafana/loki:latest
+    networks:
+      - kairo_net
+    deploy:
+      replicas: 1
+
+
+  # =========================
+  # TEMPO (TRACES)
+  # =========================
+  tempo:
+    image: grafana/tempo:latest
+    networks:
+      - kairo_net
+    deploy:
+      replicas: 1
+
+
+  # =========================
+  # GRAFANA (CONTROL PLANE UI)
+  # =========================
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    networks:
+      - kairo_net
+    deploy:
+      replicas: 1
+
+  # =========================
+  # ALERTMANAGER
+  # =========================
+  alertmanager:
+    image: prom/alertmanager:latest
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+    networks:
+      - kairo_net
+    deploy:
+      replicas: 1
+
+
+networks:
+  kairo_net:
+    driver: overlay
+
+
+volumes:
+  pgdata:
+  minio:
+
+
+configs:
+  nginx_config:
+    file: ./nginx.conf
