@@ -32,6 +32,8 @@ flowchart TB
         end
 
         Obs[Observability Component]
+
+        DevMetrics[Development Metrics App]
     end
 
     OTel[OTel Collector]
@@ -71,6 +73,13 @@ flowchart TB
     Message --> Obs
     Attachment --> Obs
     Presence --> Obs
+
+    App --> DevMetrics
+    Auth --> DevMetrics
+    Room --> DevMetrics
+    Message --> DevMetrics
+    Attachment --> DevMetrics
+    Presence --> DevMetrics
 
     Obs --> OTel
     DBC --> Postgres

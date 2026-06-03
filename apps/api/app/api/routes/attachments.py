@@ -37,17 +37,17 @@ async def upload_file(
     return await mediator.handle_raw_upload(file, user_id, idempotency_key)
 
 
-@router.get("/download/{object_name}", response_model=DownloadUrlResponse)
+@router.get("/download/{attachment_id}", response_model=DownloadUrlResponse)
 async def get_download_url(
-    object_name: str,
+    attachment_id: str,
     user_id: int = Depends(get_current_user_id),
     mediator: UploadMediator = Depends(get_upload_mediator)
 ):
     """
     Get a secure presigned URL to download an attachment.
     """
-    logger.info("Requesting download URL", object_name=object_name, user_id=user_id)
-    url = await mediator.get_secure_download_url(object_name)
+    logger.info("Requesting download URL", attachment_id=attachment_id, user_id=user_id)
+    url = await mediator.get_secure_download_url(attachment_id)
     return DownloadUrlResponse(url=url)
 
 

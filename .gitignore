@@ -77,3 +77,4 @@ Caddyfile
 !Caddyfile.example
 !Caddyfile.dev.example
 ngrok.yml
+apps/apps.code-workspace
