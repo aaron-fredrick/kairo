@@ -1,0 +1,122 @@
+%%{init: {
+  "theme": "dark",
+  "flowchart": {
+    "nodeSpacing": 50,
+    "rankSpacing": 60
+  }
+}}%%
+
+flowchart TD
+
+    subgraph API[API Service]
+
+        %% Base
+        Router["API Router (FastAPI)"]
+
+        subgraph AuthModule[Authentication Module]
+            direction TB
+            AuthRoute[Auth Route]
+            AuthService["Auth Service"]
+            AuthRepo["Auth Repository"]
+        end
+
+        subgraph RoomModule[Room Management Module]
+            direction TB
+            RoomRoute[Room Route]
+            RoomService["Room Service"]
+            RoomRepo["Room Repository"]
+        end
+
+        subgraph MessageModule[Messaging Module]
+            direction TB
+            MessageRoute[Message Route]
+            MessageService["Message Service"]
+            MessageRepo["Message Repository"]
+        end
+
+        subgraph AttachmentModule[Attachment Module]
+            direction TB
+            AttachmentRoute[Attachment Route]
+            AttachmentService["Attachment Service"]
+            AttachmentRepo["Attachment Repository"]
+        end
+
+        subgraph PresenceModule[Presence Module]
+            direction TB
+            PresenceRoute[Presence Route]
+            PresenceService["Presence Service"]
+            PresenceRepo["Presence Repository"]
+        end
+        
+        UserRepo["User Repository"]
+
+        %% DB
+        DBEngine["Database Engine (SQLAlchemy)"]
+
+        %% Core
+        Security["Security (JWT, OAuth)"]
+
+        RedisClient["Redis Client (redis-py)"]
+        StorageClient["Storage Client (boto3)"]
+
+        %% platform
+        Logging[Logging System]
+        Metrics[Prometheus Metrics Client]
+        Tracing[Tracing Instrumentation]
+
+        Health[Health Check Endpoint]
+
+    end
+
+    subgraph CP[Control Plane]
+        Prometheus[(Prometheus)]
+        Loki[(Loki)]
+        Tempo[(Tempo)]
+    end
+
+    Postgres[(PostgreSQL)]
+    Redis[(Redis)]
+    Storage[(Object Storage - S3/MinIO)]
+
+    
+
+    Router --> AuthRoute
+    Router --> RoomRoute
+    Router --> MessageRoute
+    Router --> AttachmentRoute
+    Router --> PresenceRoute
+
+    AuthRoute --> AuthService
+    RoomRoute --> RoomService
+    MessageRoute --> MessageService
+    AttachmentRoute --> AttachmentService
+    PresenceRoute --> PresenceService
+
+    AuthService --> Security
+
+    AuthService --> AuthRepo
+    RoomService --> RoomRepo
+    MessageService --> MessageRepo
+    AttachmentService --> AttachmentRepo
+    PresenceService --> PresenceRepo
+
+    AttachmentService --> StorageClient
+    AttachmentService --> RedisClient
+
+    AuthRepo --> DBEngine
+    RoomRepo --> DBEngine
+    MessageRepo --> DBEngine
+    AttachmentRepo --> DBEngine
+    PresenceRepo --> DBEngine
+
+    DBEngine --> Postgres
+
+    RedisClient --> Redis
+
+    StorageClient --> Storage
+
+    Router --> Health
+
+    Logging --> Loki
+    Metrics --> Prometheus
+    Tracing --> Tempo

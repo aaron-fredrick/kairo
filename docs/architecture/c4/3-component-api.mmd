@@ -1,122 +1,78 @@
 %%{init: {
-  "theme": "dark",
-  "flowchart": {
+"theme": "dark",
+"flowchart": {
     "nodeSpacing": 50,
     "rankSpacing": 60
-  }
+}
 }}%%
 
-flowchart TD
-
-    subgraph API[API Service]
-
-        %% Base
-        Router["API Router (FastAPI)"]
-
-        subgraph AuthModule[Authentication Module]
-            direction TB
-            AuthRoute[Auth Route]
-            AuthMediator["Auth Mediator"]
-            AuthRepo["Auth Repository"]
-        end
-
-        subgraph RoomModule[Room Management Module]
-            direction TB
-            RoomRoute[Room Route]
-            RoomMediator["Room Mediator"]
-            RoomRepo["Room Repository"]
-        end
-
-        subgraph MessageModule[Messaging Module]
-            direction TB
-            MessageRoute[Message Route]
-            MessageMediator["Message Mediator"]
-            MessageRepo["Message Repository"]
-        end
-
-        subgraph AttachmentModule[Attachment Module]
-            direction TB
-            AttachmentRoute[Attachment Route]
-            AttachmentMediator["Attachment Mediator"]
-            AttachmentRepo["Attachment Repository"]
-        end
-
-        subgraph PresenceModule[Presence Module]
-            direction TB
-            PresenceRoute[Presence Route]
-            PresenceMediator["Presence Mediator"]
-            PresenceRepo["Presence Repository"]
-        end
-        
-        UserRepo["User Repository"]
-
-        %% DB
-        DBEngine["Database Engine (SQLAlchemy)"]
-
-        %% Core
-        Security["Security (JWT, OAuth)"]
-
-        RedisClient["Redis Client (redis-py)"]
-        StorageClient["Storage Client (boto3)"]
-
-        %% platform
-        Logging[Logging System]
-        Metrics[Prometheus Metrics Client]
-        Tracing[Tracing Instrumentation]
-
-        Health[Health Check Endpoint]
-
-    end
-
-    subgraph CP[Control Plane]
-        Prometheus[(Prometheus)]
-        Loki[(Loki)]
-        Tempo[(Tempo)]
-    end
-
-    Postgres[(PostgreSQL)]
-    Redis[(Redis)]
-    Storage[(Object Storage - S3/MinIO)]
+flowchart TB
 
     
+	Edge["Edge Container (Nginx Reverse Proxy)"]
 
-    Router --> AuthRoute
-    Router --> RoomRoute
-    Router --> MessageRoute
-    Router --> AttachmentRoute
-    Router --> PresenceRoute
+    subgraph API[API Service - FastAPI Container]
 
-    AuthRoute --> AuthMediator
-    RoomRoute --> RoomMediator
-    MessageRoute --> MessageMediator
-    AttachmentRoute --> AttachmentMediator
-    PresenceRoute --> PresenceMediator
+        App[Main FastAPI App]
 
-    AuthMediator --> Security
+        subgraph Business[Business Components]
+        Auth[Auth Component]
+        Room[Room Component]
+        Message[Message Component]
+        Attachment[Attachment Component]
+        Presence[Presence Component]
+        end
 
-    AuthMediator --> AuthRepo
-    RoomMediator --> RoomRepo
-    MessageMediator --> MessageRepo
-    AttachmentMediator --> AttachmentRepo
-    PresenceMediator --> PresenceRepo
+        Health[Health Component]
 
-    AttachmentMediator --> StorageClient
-    AttachmentMediator --> RedisClient
+        subgraph Infra [Infrastructure Adapters]
+            DBC[Database Client]
+            RedisC[Redis Client]
+            StorageC[Storage Client]
+        end
 
-    AuthRepo --> DBEngine
-    RoomRepo --> DBEngine
-    MessageRepo --> DBEngine
-    AttachmentRepo --> DBEngine
-    PresenceRepo --> DBEngine
+        Obs[Observability Component]
+    end
 
-    DBEngine --> Postgres
+    OTel[OTel Collector]
 
-    RedisClient --> Redis
+    Redis[(Redis)]
+    Postgres[(PostgreSQL)]
+    Storage[(Object Storage - S3/MinIO)]
 
-    StorageClient --> Storage
+    Edge -->|HTTP| App
 
-    Router --> Health
+    App --> Auth
+    App --> Room
+    App --> Message
+    App --> Attachment
+    App --> Presence
+    App --> Health
 
-    Logging --> Loki
-    Metrics --> Prometheus
-    Tracing --> Tempo
+    Auth --> RedisC
+
+    Room --> DBC
+    
+    Message --> DBC
+    
+    Attachment --> StorageC
+    Attachment --> DBC
+    Attachment --> RedisC
+
+    Presence --> RedisC
+
+    Health --> DBC
+    Health --> RedisC
+    Health --> StorageC
+
+    App --> Obs
+    Auth --> Obs
+    Room --> Obs
+    Message --> Obs
+    Attachment --> Obs
+    Presence --> Obs
+
+    Obs --> OTel
+    DBC --> Postgres
+    RedisC --> Redis
+    StorageC --> Storage
