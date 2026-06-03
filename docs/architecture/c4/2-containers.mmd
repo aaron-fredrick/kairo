@@ -37,6 +37,7 @@ flowchart LR
 			Grafana[(Grafana)]
 			Loki[(Loki)]
 			Tempo[(Tempo)]
+			AM[Alert Manager]
 		end
 	end
 
@@ -103,3 +104,5 @@ flowchart LR
 
 	Tempo -->|Tempo Bucket| Storage
 	Loki -->|Loki Bucket| Storage
+
+	Prometheus -->AM
