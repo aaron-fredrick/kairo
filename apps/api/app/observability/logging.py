@@ -1,6 +1,9 @@
 import structlog
 import logging
 import sys
+from opentelemetry.sdk._logs import LoggingHandler
+
+# TODO: Add OpenTelemetry logging handler to send logs to OpenTelemetry Collector
 
 def setup_logging():
     logging.basicConfig(
