@@ -106,3 +106,5 @@ flowchart LR
 	Loki -->|Loki Bucket| Storage
 
 	Prometheus -->AM
+
+	AM --> |Alert Notifications| NC["Notification Channels (Webhook, Email, Slack, PagerDuty, etc.)"]
