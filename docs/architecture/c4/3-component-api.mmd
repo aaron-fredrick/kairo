@@ -8,7 +8,6 @@
 
 flowchart TB
 
-    
 	Edge["Edge Container (Nginx Reverse Proxy)"]
 
     subgraph API[API Service - FastAPI Container]
@@ -16,11 +15,11 @@ flowchart TB
         App[Main FastAPI App]
 
         subgraph Business[Business Components]
-        Auth[Auth Component]
-        Room[Room Component]
-        Message[Message Component]
-        Attachment[Attachment Component]
-        Presence[Presence Component]
+            Auth[Auth Component]
+            Room[Room Component]
+            Message[Message Component]
+            Attachment[Attachment Component]
+            Presence[Presence Component]
         end
 
         Health[Health Component]

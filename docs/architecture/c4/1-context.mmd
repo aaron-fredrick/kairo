@@ -1,2 +1,25 @@
+%%{init: {
+  "theme": "dark",
+  "flowchart": {
+    "nodeSpacing": 50,
+    "rankSpacing": 60
+  }
+}}%%
+
 flowchart LR
-    User[User] <--> Kairo[Kairo System]
+    User[User]
+
+    Kairo[Kairo System]
+
+    subgraph NC["Notification Channels"]
+        Slack[Slack]
+        Email[Email]
+        PagerDuty[PagerDuty]
+        Webhook[Webhook]
+    end
+
+    User -->|"Loads UI (HTTP)"| Kairo
+    User -->|"Calls API (HTTP)"| Kairo
+    User <-->|"WebSocket Connection"| Kairo
+
+    Kairo -->|Sends alerts to| NC

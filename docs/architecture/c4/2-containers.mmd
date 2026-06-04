@@ -17,13 +17,13 @@ flowchart LR
 		Edge["Edge Container (Nginx Reverse Proxy)"]
 
 		subgraph Apps[Application Services]
-			Web[Web Frontend - Nginx Static]
-			API[API Service]
-			WS[WebSocket Service]
+			Web(Web Frontend - Nginx Static)
+			API(API Service)
+			WS(WebSocket Service)
 
-			DB_Worker[DB Worker Service]
-			Blob_Worker[Blob Worker Service]
-			Thumb_Worker[Thumbnail Worker Service]
+			DB_Worker(DB Worker Service)
+			Blob_Worker(Blob Worker Service)
+			Thumb_Worker(Thumbnail Worker Service)
 		end
 
 		Redis[(Redis)]
@@ -41,12 +41,13 @@ flowchart LR
 		end
 	end
 
-	User -->|HTTP| Edge
-	User <-->|WebScocket| Edge
+	User -->|"Loads UI (HTTP)"| Edge
+    User -->|"Calls API (HTTP)"| Edge
+	User <-->|"WebSocket Connection"| Edge
 
-	Edge -->|HTTP| Web
-	Edge -->|HTTP| API
-	Edge <-->|WebScocket| WS
+	Edge -->|"serves static frontend (HTTP)"| Web
+	Edge -->|"routes REST API calls (HTTP)"| API
+	Edge <-->|"routes realtime traffic (WebSocket)"| WS
 
 	API -->|SQL| Postgres
 	API -->|Redis Pub/Sub| Redis

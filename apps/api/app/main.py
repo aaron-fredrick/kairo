@@ -44,7 +44,13 @@ app = FastAPI(
     openapi_url="/api/openapi.json"
 )
 
-# CORS
+# 1. request identity FIRST
+app.middleware("http")(observability.middleware.request_id_middleware)
+
+# 2. metrics SECOND
+app.middleware("http")(observability.middleware.metrics_middleware)
+
+# 3. CORS LAST (outermost policy layer)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
@@ -52,8 +58,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-app.middleware("http")(observability.middleware.metrics_middleware)
 
 observability.setup(app)
 

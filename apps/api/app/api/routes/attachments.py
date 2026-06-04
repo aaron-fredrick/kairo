@@ -4,12 +4,12 @@ from fastapi import APIRouter, Depends, Header
 from typing import List
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import get_db_session
-from app.services.message_mediator import MessageMediator
+from app.mediators.message_mediator import MessageMediator
 from app.schemas.message import MessageWithAttachmentsResponse
 import structlog
 from fastapi import APIRouter, Depends, Header, UploadFile, File, HTTPException
 from typing import Optional
-from app.services.upload_mediator import UploadMediator
+from app.mediators.upload_mediator import UploadMediator
 import structlog
 
 
