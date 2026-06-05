@@ -1,0 +1,91 @@
+%%{init: {
+  "theme": "dark",
+  "flowchart": {
+    "nodeSpacing": 50,
+    "rankSpacing": 70
+  }
+}}%%
+
+flowchart TB
+    %% ── C4 Level 3 – DB Worker ────────────────────────────────────────────────
+    %% Responsibilities:
+    %%   - Consumes the `message-events` Redis Stream via XREADGROUP
+    %%   - Persists message records to PostgreSQL (insert / soft-delete / edit)
+    %%   - Handles idempotent processing via XACK after successful DB write
+    %%   - Dead-letter: after N retries, moves event to a DLQ stream
+
+    subgraph KairoDBWorker["DB Worker  [Python asyncio service]"]
+        direction TB
+
+        subgraph Runner["Runner / Entrypoint"]
+            direction LR
+            EventLoop["asyncio Event Loop<br/>[uvloop]<br/>Top-level run() coroutine"]
+            Supervisor["Supervisor<br/>[Python class]<br/>Concurrency: N parallel consumer tasks<br/>graceful shutdown on SIGTERM/SIGINT"]
+        end
+
+        subgraph Consumer["Stream Consumer Layer"]
+            direction LR
+            StreamReader["Stream Reader<br/>[aioredis XREADGROUP]<br/>Group: db-workers-group<br/>Consumer: db-worker-{pod-id}"]
+            AckManager["Ack Manager<br/>[Python class]<br/>XACK on success<br/>XCLAIM retry on timeout"]
+            DLQPublisher["DLQ Publisher<br/>[Redis XADD]<br/>db-events-dlq after max retries"]
+        end
+
+        subgraph Handlers["Event Handlers"]
+            direction LR
+            MessageHandler["Message Handler<br/>[Python class]<br/>Routes by event.type:<br/>  message.created<br/>  message.edited<br/>  message.deleted"]
+            AttachmentHandler["Attachment Handler<br/>[Python class]<br/>Routes by event.type:<br/>  attachment.linked<br/>  attachment.deleted"]
+        end
+
+        subgraph Infra["Infrastructure Layer"]
+            direction LR
+            MessageRepo["Message Repository<br/>[SQLAlchemy async]<br/>insert, soft-delete, update"]
+            AttachmentRepo["Attachment Repository<br/>[SQLAlchemy async]<br/>link / unlink records"]
+            ORM["ORM Models<br/>[SQLAlchemy mapped]<br/>MessageORM, AttachmentORM"]
+            DBSession["DB Session Factory<br/>[async_sessionmaker]<br/>One session per event batch"]
+        end
+
+        Observability["Observability<br/>[structlog + OpenTelemetry]<br/>Events processed, retry counts,<br/>lag metrics"]
+        Container["AppContainer<br/>[Composition Root]<br/>Wires Redis, DB engine at startup"]
+    end
+
+    %% ── External Systems ──────────────────────────────────────────────────────
+    Redis[("Redis<br/>[Streams: message-events<br/>DLQ: db-events-dlq]")]
+    Postgres[("PostgreSQL<br/>[Relational DB]")]
+
+    %% ── Flows ─────────────────────────────────────────────────────────────────
+    EventLoop -->|"Spawns N tasks"| Supervisor
+    Supervisor -->|"Runs"| StreamReader
+
+    StreamReader -->|"XREADGROUP COUNT 10<br/>BLOCK 5000ms"| Redis
+    StreamReader -->|"Dispatches event"| MessageHandler & AttachmentHandler
+
+    MessageHandler -->|"Calls"| MessageRepo
+    AttachmentHandler -->|"Calls"| AttachmentRepo
+
+    MessageRepo & AttachmentRepo -->|"Uses"| ORM
+    ORM -->|"SQL via asyncpg"| Postgres
+    MessageRepo & AttachmentRepo -->|"Uses"| DBSession
+    DBSession -->|"SQL via asyncpg"| Postgres
+
+    StreamReader -->|"On success"| AckManager
+    AckManager -->|"XACK"| Redis
+    AckManager -->|"On max retries"| DLQPublisher
+    DLQPublisher -->|"XADD db-events-dlq"| Redis
+
+    Container -->|"Initialises"| DBSession & StreamReader
+    StreamReader -..->|"Emits spans / logs"| Observability
+
+    %% ── Styles ────────────────────────────────────────────────────────────────
+    classDef runner      fill:#14532d,stroke:#16a34a,color:#bbf7d0
+    classDef consumer    fill:#1e1b4b,stroke:#7c3aed,color:#ddd6fe
+    classDef handlers    fill:#451a03,stroke:#c2410c,color:#fed7aa
+    classDef infralayer  fill:#172554,stroke:#1d4ed8,color:#bfdbfe
+    classDef external    fill:#0f172a,stroke:#475569,color:#94a3b8,stroke-dasharray:6 3
+    classDef cross       fill:#1c1917,stroke:#78716c,color:#d6d3d1
+
+    class Runner,EventLoop,Supervisor runner
+    class Consumer,StreamReader,AckManager,DLQPublisher consumer
+    class Handlers,MessageHandler,AttachmentHandler handlers
+    class Infra,MessageRepo,AttachmentRepo,ORM,DBSession infralayer
+    class Observability,Container cross
+    class Redis,Postgres external

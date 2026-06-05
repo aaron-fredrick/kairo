@@ -8,104 +8,101 @@
 
 flowchart LR
 
-	%% Actors (outside system boundary conceptually)
-	User[User]
+    %% Actors (outside system boundary)
+    User["👤 User"]
 
-	%% System boundary containers
-	subgraph Kairo[Kairo System]
+    %% System boundary
+    subgraph Kairo["Kairo System"]
 
-		Edge["Edge Container (Nginx Reverse Proxy)"]
+        Edge["Edge Container<br/>[Nginx Reverse Proxy]"]
 
-		subgraph Apps[Application Services]
-			Web(Web Frontend - Nginx Static)
-			API(API Service)
-			WS(WebSocket Service)
+        subgraph Apps["Application Services"]
+            Web("Web Frontend<br/>[Nginx Static]")
+            API("API Service<br/>[FastAPI]")
+            WS("WebSocket Service<br/>[FastAPI + WebSockets]")
 
-			DB_Worker(DB Worker Service)
-			Blob_Worker(Blob Worker Service)
-			Thumb_Worker(Thumbnail Worker Service)
-		end
+            DB_Worker("DB Worker<br/>[Redis Stream Consumer]")
+            Blob_Worker("Blob Worker<br/>[Redis Stream Consumer]")
+            Thumb_Worker("Thumbnail Worker<br/>[Redis Stream Consumer]")
+        end
 
-		Redis[(Redis)]
-		Postgres[(PostgreSQL)]
-		Storage[(Object Storage - S3/MinIO)]
+        Redis[("Redis<br/>[Cache / Pub-Sub / Streams]")]
+        Postgres[("PostgreSQL<br/>[Relational DB]")]
+        Storage[("Object Storage<br/>[S3 / MinIO]")]
 
-		OTEL[OpenTelemetry Collector]
+        OTEL["OpenTelemetry Collector"]
 
-		subgraph CP[Control Plane]
-			Prometheus[(Prometheus)]
-			Grafana[(Grafana)]
-			Loki[(Loki)]
-			Tempo[(Tempo)]
-			AM[Alert Manager]
-		end
-	end
+        subgraph CP["Control Plane"]
+            Prometheus[("Prometheus")]
+            Grafana[("Grafana")]
+            Loki[("Loki")]
+            Tempo[("Tempo")]
+            AM["Alert Manager"]
+        end
+    end
 
-	User -->|"Loads UI (HTTP)"| Edge
+    User -->|"Loads UI (HTTP)"| Edge
     User -->|"Calls API (HTTP)"| Edge
-	User <-->|"WebSocket Connection"| Edge
+    User <-->|"WebSocket Connection"| Edge
 
-	Edge -->|"serves static frontend (HTTP)"| Web
-	Edge -->|"routes REST API calls (HTTP)"| API
-	Edge <-->|"routes realtime traffic (WebSocket)"| WS
+    Edge -->|"serves static frontend (HTTP)"| Web
+    Edge -->|"routes REST API calls (HTTP)"| API
+    Edge <-->|"routes realtime traffic (WebSocket)"| WS
 
-	API -->|SQL| Postgres
-	API -->|Redis Pub/Sub| Redis
-	API -->|Redis XADD Streams| Redis
-	API -->|S3 API| Storage
+    API -->|SQL| Postgres
+    API -->|"Redis Pub/Sub"| Redis
+    API -->|"Redis XADD Streams"| Redis
+    API -->|"S3 API"| Storage
 
-	WS -->|Redis Pub/Sub| Redis
-	WS -->|Redis XADD Streams| Redis
-	WS -->|SQL| Postgres
+    WS -->|"Redis Pub/Sub"| Redis
+    WS -->|"Redis XADD Streams"| Redis
+    WS -->|SQL| Postgres
 
-	DB_Worker -->|SQL| Postgres
-	DB_Worker -->|"XREADGROUP (db-workers-group)"| Redis
+    DB_Worker -->|SQL| Postgres
+    DB_Worker -->|"XREADGROUP (db-workers-group)"| Redis
 
-
-	Blob_Worker -->|"XREADGROUP (blob-workers-group)"| Redis
-	Blob_Worker -->|Redis XADD Streams| Redis
-	Blob_Worker -->|S3 API| Storage
+    Blob_Worker -->|"XREADGROUP (blob-workers-group)"| Redis
+    Blob_Worker -->|"Redis XADD Streams"| Redis
+    Blob_Worker -->|"S3 API"| Storage
     Blob_Worker -->|SQL| Postgres
 
-	Thumb_Worker -->|"XREADGROUP (thumbnail-workers-group)"| Redis
-	Thumb_Worker -->|Redis Pub/Sub| Redis
-	Thumb_Worker -->|S3 API| Storage
+    Thumb_Worker -->|"XREADGROUP (thumbnail-workers-group)"| Redis
+    Thumb_Worker -->|"Redis Pub/Sub"| Redis
+    Thumb_Worker -->|"S3 API"| Storage
 
-	%% Control Plane connections (monitoring)	
-	Web -->|Metrics| OTEL
-	API -->|Metrics| OTEL
-	WS -->|Metrics| OTEL
-	DB_Worker -->|Metrics| OTEL
-	Blob_Worker -->|Metrics| OTEL
-	Thumb_Worker -->|Metrics| OTEL
+    %% Control Plane – telemetry
+    Web & API & WS & DB_Worker & Blob_Worker & Thumb_Worker -->|"Metrics / Logs / Traces"| OTEL
 
-	Web -->|Logs| OTEL
-	API -->|Logs| OTEL
-	WS -->|Logs| OTEL
-	DB_Worker -->|Logs| OTEL
-	Blob_Worker -->|Logs| OTEL
-	Thumb_Worker -->|Logs| OTEL
+    Prometheus -->|"Scrape Metrics"| OTEL
+    OTEL -->|"Tempo Traces"| Tempo
+    OTEL -->|"Loki Logs"| Loki
 
-	Web -->|Traces| OTEL
-	API -->|Traces| OTEL
-	WS -->|Traces| OTEL
-	DB_Worker -->|Traces| OTEL
-	Blob_Worker -->|Traces| OTEL
-	Thumb_Worker -->|Traces| OTEL
+    Grafana -->|"Query Metrics"| Prometheus
+    Grafana -->|"Query Logs"| Loki
+    Grafana -->|"Query Traces"| Tempo
 
-	Prometheus -->|Scrape Metrics| OTEL
+    Tempo -->|"Tempo Bucket"| Storage
+    Loki -->|"Loki Bucket"| Storage
 
-	OTEL -->|Tempo Traces| Tempo
+    Prometheus --> AM
+    AM -->|"Alert Notifications"| NC["Notification Channels<br/>(Webhook, Email, Slack, PagerDuty)"]
 
-	OTEL -->|Loki Logs| Loki
+    %% ── Styles ───────────────────────────────────────────────────────────────
+    classDef person     fill:#1e3a5f,stroke:#3b82f6,color:#bfdbfe
+    classDef edgelayer  fill:#1e293b,stroke:#475569,color:#e2e8f0
+    classDef appsvc     fill:#14532d,stroke:#16a34a,color:#bbf7d0
+    classDef worker     fill:#172554,stroke:#1d4ed8,color:#bfdbfe
+    classDef datastore  fill:#3b0764,stroke:#9333ea,color:#e9d5ff
+    classDef observ     fill:#1c1917,stroke:#78716c,color:#d6d3d1
+    classDef ctrlplane  fill:#1a1a2e,stroke:#6366f1,color:#c7d2fe
+    classDef external   fill:#0f172a,stroke:#475569,color:#94a3b8,stroke-dasharray:6 3
 
-	Grafana -->|Query Metrics| Prometheus
-	Grafana -->|Query Logs| Loki
-	Grafana -->|Query Traces| Tempo
-
-	Tempo -->|Tempo Bucket| Storage
-	Loki -->|Loki Bucket| Storage
-
-	Prometheus -->AM
-
-	AM --> |Alert Notifications| NC["Notification Channels (Webhook, Email, Slack, PagerDuty, etc.)"]
+    class User person
+    class Edge edgelayer
+    class Web,API appsvc
+    class WS appsvc
+    class DB_Worker,Blob_Worker,Thumb_Worker worker
+    class Redis,Postgres,Storage datastore
+    class OTEL observ
+    class CP,Prometheus,Grafana,Loki,Tempo,AM ctrlplane
+    class NC external

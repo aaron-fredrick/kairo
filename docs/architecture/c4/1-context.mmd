@@ -1,21 +1,21 @@
 %%{init: {
   "theme": "dark",
   "flowchart": {
-    "nodeSpacing": 50,
-    "rankSpacing": 60
+    "nodeSpacing": 60,
+    "rankSpacing": 80
   }
 }}%%
 
 flowchart LR
-    User[User]
+    User["👤 User"]
 
-    Kairo[Kairo System]
+    Kairo["⚙️ Kairo System"]
 
     subgraph NC["Notification Channels"]
-        Slack[Slack]
-        Email[Email]
-        PagerDuty[PagerDuty]
-        Webhook[Webhook]
+        Slack["Slack"]
+        Email["Email"]
+        PagerDuty["PagerDuty"]
+        Webhook["Webhook"]
     end
 
     User -->|"Loads UI (HTTP)"| Kairo
@@ -23,3 +23,12 @@ flowchart LR
     User <-->|"WebSocket Connection"| Kairo
 
     Kairo -->|Sends alerts to| NC
+
+    %% ── Styles ───────────────────────────────────────────────────────────────
+    classDef person    fill:#1e3a5f,stroke:#3b82f6,color:#bfdbfe
+    classDef system    fill:#14532d,stroke:#16a34a,color:#bbf7d0
+    classDef external  fill:#1c1917,stroke:#78716c,color:#d6d3d1,stroke-dasharray:6 3
+
+    class User person
+    class Kairo system
+    class NC,Slack,Email,PagerDuty,Webhook external

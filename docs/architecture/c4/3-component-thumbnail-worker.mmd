@@ -1,0 +1,101 @@
+%%{init: {
+  "theme": "dark",
+  "flowchart": {
+    "nodeSpacing": 50,
+    "rankSpacing": 70
+  }
+}}%%
+
+flowchart TB
+    %% ── C4 Level 3 – Thumbnail Worker ────────────────────────────────────────
+    %% Responsibilities:
+    %%   - Consumes `thumbnail-events` Redis Stream via XREADGROUP
+    %%   - Downloads the source blob from S3, generates thumbnail via Pillow
+    %%   - Uploads the thumbnail to S3 under a thumbs/ prefix
+    %%   - Publishes `thumbnail.ready` event via Redis Pub/Sub so WS clients
+    %%     can refresh their attachment preview in real-time
+    %%   - Dead-letter: after N retries, moves event to a DLQ stream
+
+    subgraph KairoThumbWorker["Thumbnail Worker  [Python asyncio service]"]
+        direction TB
+
+        subgraph Runner["Runner / Entrypoint"]
+            direction LR
+            EventLoop["asyncio Event Loop<br/>[uvloop]<br/>Top-level run() coroutine"]
+            Supervisor["Supervisor<br/>[Python class]<br/>Concurrency: N parallel consumer tasks<br/>graceful shutdown on SIGTERM/SIGINT"]
+        end
+
+        subgraph Consumer["Stream Consumer Layer"]
+            direction LR
+            StreamReader["Stream Reader<br/>[aioredis XREADGROUP]<br/>Group: thumbnail-workers-group<br/>Consumer: thumb-worker-{pod-id}"]
+            AckManager["Ack Manager<br/>[Python class]<br/>XACK on success<br/>XCLAIM retry on timeout"]
+            DLQPublisher["DLQ Publisher<br/>[Redis XADD]<br/>thumbnail-events-dlq after max retries"]
+        end
+
+        subgraph Handlers["Event Handlers"]
+            direction LR
+            ThumbHandler["Thumbnail Handler<br/>[Python class]<br/>Routes by event.type:<br/>  blob.ready"]
+        end
+
+        subgraph AppLogic["Application Logic"]
+            direction LR
+            ImageProcessor["Image Processor<br/>[Pillow / PIL]<br/>Downsample to configured max WxH<br/>Output: WebP (quality 80)"]
+            FormatGuard["Format Guard<br/>[Python class]<br/>Verifies source MIME is image/*<br/>Skips non-image blobs silently"]
+            NotifyPublisher["Notify Publisher<br/>[Python class]<br/>Publish thumbnail.ready to<br/>Redis Pub/Sub channel room:{room_id}"]
+        end
+
+        subgraph Infra["Infrastructure Layer"]
+            direction LR
+            S3Client["S3 Client<br/>[aiobotocore / boto3]<br/>get_object (source blob)<br/>put_object (thumbs/ prefix)"]
+        end
+
+        Observability["Observability<br/>[structlog + OpenTelemetry]<br/>Images processed, resize latency,<br/>S3 upload duration"]
+        Container["AppContainer<br/>[Composition Root]<br/>Wires Redis, S3 at startup"]
+    end
+
+    %% ── External Systems ──────────────────────────────────────────────────────
+    Redis[("Redis<br/>[Streams: thumbnail-events<br/>Pub/Sub: room:{room_id}<br/>DLQ: thumbnail-events-dlq]")]
+    Storage[("S3 / MinIO<br/>[Object Storage]<br/>blobs/ → thumbs/ prefix")]
+
+    %% ── Flows ─────────────────────────────────────────────────────────────────
+    EventLoop -->|"Spawns N tasks"| Supervisor
+    Supervisor -->|"Runs"| StreamReader
+
+    StreamReader -->|"XREADGROUP COUNT 10<br/>BLOCK 5000ms"| Redis
+    StreamReader -->|"Dispatches event"| ThumbHandler
+
+    ThumbHandler -->|"Check MIME"| FormatGuard
+    FormatGuard -->|"Allowed – fetch source"| S3Client
+    S3Client -->|"get_object blobs/{key}"| Storage
+
+    FormatGuard -->|"Valid image bytes"| ImageProcessor
+    ImageProcessor -->|"Resized WebP bytes"| S3Client
+    S3Client -->|"put_object thumbs/{key}.webp"| Storage
+
+    ImageProcessor -->|"Emit ready event"| NotifyPublisher
+    NotifyPublisher -->|"PUBLISH room:{room_id}"| Redis
+
+    StreamReader -->|"On success"| AckManager
+    AckManager -->|"XACK"| Redis
+    AckManager -->|"On max retries"| DLQPublisher
+    DLQPublisher -->|"XADD thumbnail-events-dlq"| Redis
+
+    Container -->|"Initialises"| StreamReader & S3Client
+    StreamReader -..->|"Emits spans / logs"| Observability
+
+    %% ── Styles ────────────────────────────────────────────────────────────────
+    classDef runner      fill:#14532d,stroke:#16a34a,color:#bbf7d0
+    classDef consumer    fill:#1e1b4b,stroke:#7c3aed,color:#ddd6fe
+    classDef handlers    fill:#451a03,stroke:#c2410c,color:#fed7aa
+    classDef applogic    fill:#1e3a5f,stroke:#3b82f6,color:#bfdbfe
+    classDef infralayer  fill:#172554,stroke:#1d4ed8,color:#bfdbfe
+    classDef external    fill:#0f172a,stroke:#475569,color:#94a3b8,stroke-dasharray:6 3
+    classDef cross       fill:#1c1917,stroke:#78716c,color:#d6d3d1
+
+    class Runner,EventLoop,Supervisor runner
+    class Consumer,StreamReader,AckManager,DLQPublisher consumer
+    class Handlers,ThumbHandler handlers
+    class AppLogic,ImageProcessor,FormatGuard,NotifyPublisher applogic
+    class Infra,S3Client infralayer
+    class Observability,Container cross
+    class Redis,Storage external

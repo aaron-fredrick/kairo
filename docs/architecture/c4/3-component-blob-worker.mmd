@@ -1,0 +1,107 @@
+%%{init: {
+  "theme": "dark",
+  "flowchart": {
+    "nodeSpacing": 50,
+    "rankSpacing": 70
+  }
+}}%%
+
+flowchart TB
+    %% ── C4 Level 3 – Blob Worker ──────────────────────────────────────────────
+    %% Responsibilities:
+    %%   - Consumes the `blob-events` Redis Stream via XREADGROUP
+    %%   - Validates and moves uploads from temp to permanent S3 prefix
+    %%   - Records final S3 key in PostgreSQL (UploadORM)
+    %%   - Publishes `blob.ready` event to `thumbnail-events` stream for fanout
+    %%   - Dead-letter: after N retries, moves event to a DLQ stream
+
+    subgraph KairoBlobWorker["Blob Worker  [Python asyncio service]"]
+        direction TB
+
+        subgraph Runner["Runner / Entrypoint"]
+            direction LR
+            EventLoop["asyncio Event Loop<br/>[uvloop]<br/>Top-level run() coroutine"]
+            Supervisor["Supervisor<br/>[Python class]<br/>Concurrency: N parallel consumer tasks<br/>graceful shutdown on SIGTERM/SIGINT"]
+        end
+
+        subgraph Consumer["Stream Consumer Layer"]
+            direction LR
+            StreamReader["Stream Reader<br/>[aioredis XREADGROUP]<br/>Group: blob-workers-group<br/>Consumer: blob-worker-{pod-id}"]
+            AckManager["Ack Manager<br/>[Python class]<br/>XACK on success<br/>XCLAIM retry on timeout"]
+            DLQPublisher["DLQ Publisher<br/>[Redis XADD]<br/>blob-events-dlq after max retries"]
+        end
+
+        subgraph Handlers["Event Handlers"]
+            direction LR
+            UploadHandler["Upload Handler<br/>[Python class]<br/>Routes by event.type:<br/>  blob.upload.requested"]
+            DeleteHandler["Delete Handler<br/>[Python class]<br/>Routes by event.type:<br/>  blob.delete.requested"]
+        end
+
+        subgraph AppLogic["Application Logic"]
+            direction LR
+            BlobProcessor["Blob Processor<br/>[Python class]<br/>Copies temp → permanent S3 prefix<br/>Deletes temp object after move"]
+            MimeValidator["MIME Validator<br/>[Python class]<br/>Magic-byte check on S3 object<br/>Rejects disallowed content types"]
+            DownstreamNotifier["Downstream Notifier<br/>[Python class]<br/>XADD thumbnail-events stream<br/>so Thumbnail Worker can process"]
+        end
+
+        subgraph Infra["Infrastructure Layer"]
+            direction LR
+            UploadRepo["Upload Repository<br/>[SQLAlchemy async]<br/>Update s3_key, status on UploadORM"]
+            S3Client["S3 Client<br/>[aiobotocore / boto3]<br/>copy_object, delete_object,<br/>get_object_tagging"]
+            DBSession["DB Session Factory<br/>[async_sessionmaker]"]
+        end
+
+        Observability["Observability<br/>[structlog + OpenTelemetry]<br/>Upload success/failure rates,<br/>bytes processed, copy latency"]
+        Container["AppContainer<br/>[Composition Root]<br/>Wires Redis, S3, DB engine at startup"]
+    end
+
+    %% ── External Systems ──────────────────────────────────────────────────────
+    Redis[("Redis<br/>[Streams: blob-events<br/>thumbnail-events<br/>DLQ: blob-events-dlq]")]
+    Postgres[("PostgreSQL<br/>[Relational DB]")]
+    Storage[("S3 / MinIO<br/>[Object Storage]<br/>temp/ → blobs/ prefix move")]
+
+    %% ── Flows ─────────────────────────────────────────────────────────────────
+    EventLoop -->|"Spawns N tasks"| Supervisor
+    Supervisor -->|"Runs"| StreamReader
+
+    StreamReader -->|"XREADGROUP COUNT 10<br/>BLOCK 5000ms"| Redis
+    StreamReader -->|"Dispatches event"| UploadHandler & DeleteHandler
+
+    UploadHandler -->|"Validate"| MimeValidator
+    MimeValidator -->|"Read object metadata"| S3Client
+    UploadHandler -->|"Process blob"| BlobProcessor
+    BlobProcessor -->|"copy_object / delete_object"| S3Client
+    S3Client -->|"S3 API"| Storage
+
+    BlobProcessor -->|"Update s3_key, mark complete"| UploadRepo
+    UploadRepo -->|"Uses"| DBSession
+    DBSession -->|"SQL via asyncpg"| Postgres
+
+    BlobProcessor -->|"XADD thumbnail-events"| DownstreamNotifier
+    DeleteHandler -->|"delete_object"| S3Client
+    DownstreamNotifier -->|"Redis XADD"| Redis
+
+    StreamReader -->|"On success"| AckManager
+    AckManager -->|"XACK"| Redis
+    AckManager -->|"On max retries"| DLQPublisher
+    DLQPublisher -->|"XADD blob-events-dlq"| Redis
+
+    Container -->|"Initialises"| DBSession & StreamReader & S3Client
+    StreamReader -..->|"Emits spans / logs"| Observability
+
+    %% ── Styles ────────────────────────────────────────────────────────────────
+    classDef runner      fill:#14532d,stroke:#16a34a,color:#bbf7d0
+    classDef consumer    fill:#1e1b4b,stroke:#7c3aed,color:#ddd6fe
+    classDef handlers    fill:#451a03,stroke:#c2410c,color:#fed7aa
+    classDef applogic    fill:#1e3a5f,stroke:#3b82f6,color:#bfdbfe
+    classDef infralayer  fill:#172554,stroke:#1d4ed8,color:#bfdbfe
+    classDef external    fill:#0f172a,stroke:#475569,color:#94a3b8,stroke-dasharray:6 3
+    classDef cross       fill:#1c1917,stroke:#78716c,color:#d6d3d1
+
+    class Runner,EventLoop,Supervisor runner
+    class Consumer,StreamReader,AckManager,DLQPublisher consumer
+    class Handlers,UploadHandler,DeleteHandler handlers
+    class AppLogic,BlobProcessor,MimeValidator,DownstreamNotifier applogic
+    class Infra,UploadRepo,S3Client,DBSession infralayer
+    class Observability,Container cross
+    class Redis,Postgres,Storage external

@@ -1,0 +1,96 @@
+%%{init: {
+  "theme": "dark",
+  "flowchart": {
+    "nodeSpacing": 50,
+    "rankSpacing": 70
+  }
+}}%%
+
+flowchart TB
+    %% ── C4 Level 3 – WebSocket Service ───────────────────────────────────────
+    %% Responsibilities:
+    %%   - Maintains persistent WebSocket connections per authenticated user
+    %%   - Subscribes to Redis Pub/Sub channels per room and delivers events
+    %%   - Publishes presence heartbeats and message events to Redis Streams
+    %%   - Reads room membership / user records from PostgreSQL on connect
+
+    Edge["Edge / Load Balancer<br/>[Nginx Reverse Proxy]"]
+
+    subgraph KairoWS["Kairo WebSocket Service  [FastAPI + WebSockets]"]
+        direction TB
+
+        subgraph Transport["Transport Layer"]
+            direction LR
+            WSRouter["WebSocket Router<br/>[FastAPI WebSocket endpoint]<br/>/ws/{room_id}"]
+            AuthMiddleware["Auth Middleware<br/>[JWT validation on upgrade]<br/>rejects unauthenticated handshakes"]
+            ConnManager["Connection Manager<br/>[In-process registry]<br/>active_connections: dict[room_id, set[WebSocket]]"]
+        end
+
+        subgraph EventBus["Event Bus Layer"]
+            direction LR
+            PubSubListener["Pub/Sub Listener<br/>[aioredis subscribe]<br/>One task per active room channel"]
+            StreamPublisher["Stream Publisher<br/>[Redis XADD]<br/>Presence events → presence-events stream<br/>Message events → message-events stream"]
+        end
+
+        subgraph AppLogic["Application Logic"]
+            direction LR
+            PresenceHandler["Presence Handler<br/>[Python async]<br/>Heartbeat tracking, join/leave events"]
+            MessageBroadcaster["Message Broadcaster<br/>[Python async]<br/>Fanout received Pub/Sub events<br/>to all sockets in room"]
+            RoomGuard["Room Guard<br/>[Python class]<br/>Verifies user membership before join"]
+        end
+
+        subgraph Infra["Infrastructure Layer"]
+            direction LR
+            UserRepo["User Repository<br/>[SQLAlchemy async]<br/>Lookup user on connect"]
+            RoomRepo["Room Repository<br/>[SQLAlchemy async]<br/>Membership checks"]
+            CacheClient["Cache Client<br/>[aioredis]<br/>Presence TTL keys"]
+        end
+
+        Observability["Observability<br/>[structlog + OpenTelemetry]<br/>Connection counts, message rates,<br/>latency spans"]
+        Container["AppContainer<br/>[Composition Root]<br/>Wires DB, Redis, repos at startup"]
+    end
+
+    %% ── External Systems ──────────────────────────────────────────────────────
+    Redis[("Redis<br/>[Cache / Pub-Sub / Streams]")]
+    Postgres[("PostgreSQL<br/>[Relational DB]")]
+
+    %% ── Flows ─────────────────────────────────────────────────────────────────
+    Edge <-->|"WebSocket Upgrade (HTTP → WS)"| WSRouter
+    WSRouter -->|"Validates token"| AuthMiddleware
+    AuthMiddleware -->|"Checks membership"| RoomGuard
+    RoomGuard -->|"Reads"| RoomRepo
+    RoomRepo -->|"SQL"| Postgres
+
+    WSRouter -->|"Registers socket"| ConnManager
+    ConnManager -->|"Spawns listener task"| PubSubListener
+    PubSubListener -->|"SUBSCRIBE room:{room_id}"| Redis
+
+    PubSubListener -->|"Received event"| MessageBroadcaster
+    MessageBroadcaster -->|"Fanout to sockets"| ConnManager
+
+    WSRouter -->|"On disconnect / heartbeat"| PresenceHandler
+    PresenceHandler -->|"XADD presence-events"| StreamPublisher
+    PresenceHandler -->|"SET presence:{user_id} TTL"| CacheClient
+    StreamPublisher -->|"Redis XADD"| Redis
+    CacheClient -->|"aioredis"| Redis
+
+    WSRouter -->|"On message received"| StreamPublisher
+    UserRepo -->|"SQL"| Postgres
+
+    Container -->|"Initialises"| CacheClient & UserRepo & RoomRepo
+    WSRouter -..->|"Emits spans / logs"| Observability
+
+    %% ── Styles ────────────────────────────────────────────────────────────────
+    classDef transport   fill:#14532d,stroke:#16a34a,color:#bbf7d0
+    classDef eventbus    fill:#1e1b4b,stroke:#7c3aed,color:#ddd6fe
+    classDef applogic    fill:#451a03,stroke:#c2410c,color:#fed7aa
+    classDef infralayer  fill:#172554,stroke:#1d4ed8,color:#bfdbfe
+    classDef external    fill:#0f172a,stroke:#475569,color:#94a3b8,stroke-dasharray:6 3
+    classDef cross       fill:#1c1917,stroke:#78716c,color:#d6d3d1
+
+    class Transport,WSRouter,AuthMiddleware,ConnManager transport
+    class EventBus,PubSubListener,StreamPublisher eventbus
+    class AppLogic,PresenceHandler,MessageBroadcaster,RoomGuard applogic
+    class Infra,UserRepo,RoomRepo,CacheClient infralayer
+    class Observability,Container cross
+    class Edge,Redis,Postgres external
