@@ -31,42 +31,51 @@ class AuthService:
         return defaults
 
     async def _generate_unique_username(self) -> str:
+        logger.debug("Starting unique username generation for anonymous join")
         max_attempts = 10
-        for _ in range(max_attempts):
+        for attempt in range(1, max_attempts + 1):
             adj = random.choice(self._adjectives).capitalize()
             noun = random.choice(self._nouns).capitalize()
             num = random.randint(1000, 9999)
             username = f"{adj}{noun}{num}"
             
+            logger.debug("Generated candidate username", candidate=username, attempt=attempt)
             cache_key = f"username_taken:{username}"
             
             # Trust the local cache: if TTL is necessary local TTL is half of actual TTL.
             # CacheManager handles this automatically now.
             exists_in_cache = await self.cache_manager.exists(cache_key)
             if exists_in_cache:
+                logger.debug("Username exists in cache, retrying", candidate=username)
                 continue
                 
             # Check DB to be absolutely sure for cold cache.
             existing_user = await self.user_repo.get_by_username(username)
             if existing_user:
+                 logger.debug("Username exists in DB but not cache, reserving in cache and retrying", candidate=username)
                  await self.cache_manager.set(cache_key, "1", ttl=86400) # Reserve it in cache
                  continue
                  
             # Username is unique! Reserve it in cache
+            logger.debug("Unique username found and reserved", username=username)
             await self.cache_manager.set(cache_key, "1", ttl=86400) 
             return username
             
+        logger.error("Failed to generate a unique username", max_attempts=max_attempts)
         raise ValueError("Could not generate a unique username")
 
     async def anonymous_join(self) -> Tuple[UserDomain, str]:
+        logger.debug("Initiating anonymous join flow")
         username = await self._generate_unique_username()
         
         # Create user
+        logger.debug("Creating anonymous user in database", username=username)
         user_dto = await self.user_repo.create({
             "username": username,
             "is_anonymous": True,
             "role": "normal"
         })
+        logger.debug("Anonymous user created successfully", user_id=user_dto.id)
         
         user_domain = UserDomain(
             id=user_dto.id,
@@ -78,6 +87,8 @@ class AuthService:
         )
         
         # Create token
+        logger.debug("Generating access token for anonymous user", user_id=user_dto.id)
         token = create_access_token(subject=str(user_dto.id))
         
+        logger.debug("Anonymous join flow completed successfully", user_id=user_dto.id)
         return user_domain, token

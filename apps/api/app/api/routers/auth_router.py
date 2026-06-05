@@ -36,7 +36,9 @@ async def anonymous_join(
     user_id: int | None = Depends(get_current_user_id_optional),
     service: AuthService = Depends(get_auth_service)
 ):
+    logger.debug("Received anonymous join request", existing_user_id=user_id)
     if user_id is not None:
+        logger.debug("Rejecting join request: user already authenticated", user_id=user_id)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User already registered and authenticated"
