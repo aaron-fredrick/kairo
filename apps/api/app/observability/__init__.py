@@ -13,14 +13,15 @@ from . import middleware
 def setup(app: Optional[FastAPI] = None) -> None:
 	"""
 	Convenience wrapper to configure observability.
-	Always configures logging; if `app` is provided and OTEL is enabled, also configures tracing and metrics.
+	Always configures logging; if `app` is provided, also configures tracing and metrics.
+	OTLP Exporters are only attached if OTEL_ENABLED is True.
 	"""
 	setup_logging()
-	if app is not None and settings.OTEL_ENABLED:
+	if app is not None:
 		setup_metrics(app)
-  
-		setup_otel(app)
-  
 		setup_tracing(app)
+  
+		if settings.OTEL_ENABLED:
+			setup_otel(app)
 
 __all__ = ["setup", "middleware"]
