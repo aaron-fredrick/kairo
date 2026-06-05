@@ -32,9 +32,10 @@ class Settings(BaseSettings):
     
     @property
     def DATABASE_URL(self) -> str:
-        if self.ENV == "production" or os.getenv("DB_BACKEND", "postgres") == "postgres":
+        backend = os.getenv("DB_BACKEND", "sqlite" if self.ENV == "development" else "postgres")
+        if backend == "postgres":
             return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
-        return os.getenv("SQLITE_URL", "sqlite+aiosqlite:///./data/db/kairo.db")
+        return os.getenv("SQLITE_URL", "sqlite+aiosqlite:///kairo.db")
     
     # Redis
     REDIS_URL: str | None = os.getenv("REDIS_HOST", None)

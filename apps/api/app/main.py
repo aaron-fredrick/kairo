@@ -40,7 +40,7 @@ async def lifespan(app: FastAPI):
             "Startup checks failed. Exiting.",
             error=str(e),
         )
-        sys.exit(1)
+        raise RuntimeError("Application startup failed due to connection errors.") from e
 
     try:
         yield
