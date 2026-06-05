@@ -34,27 +34,21 @@ class AuthService:
         logger.debug("Starting unique username generation for anonymous join")
         max_attempts = 10
         for attempt in range(1, max_attempts + 1):
-            adj = random.choice(self._adjectives).capitalize()
-            noun = random.choice(self._nouns).capitalize()
+            adj = random.choice(self._adjectives).lower()
+            noun = random.choice(self._nouns).lower()
             num = random.randint(1000, 9999)
-            username = f"{adj}{noun}{num}"
+            username = f"{adj}-{noun}-{num}"
             
             logger.debug("Generated candidate username", candidate=username, attempt=attempt)
             cache_key = f"username_taken:{username}"
             
             # Trust the local cache: if TTL is necessary local TTL is half of actual TTL.
             # CacheManager handles this automatically now.
+            # Only checking cache, as per design repo should not be involved in uniqueness check
             exists_in_cache = await self.cache_manager.exists(cache_key)
             if exists_in_cache:
                 logger.debug("Username exists in cache, retrying", candidate=username)
                 continue
-                
-            # Check DB to be absolutely sure for cold cache.
-            existing_user = await self.user_repo.get_by_username(username)
-            if existing_user:
-                 logger.debug("Username exists in DB but not cache, reserving in cache and retrying", candidate=username)
-                 await self.cache_manager.set(cache_key, "1", ttl=86400) # Reserve it in cache
-                 continue
                  
             # Username is unique! Reserve it in cache
             logger.debug("Unique username found and reserved", username=username)
