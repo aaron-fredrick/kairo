@@ -7,7 +7,7 @@ from app.core.config import settings
 from app.infrastructure.repositories.user_repository import UserRepository
 from app.infrastructure.cache.cache_manager import CacheManager
 from app.domain.models.user_domain import UserDomain
-from app.core.security import create_access_token, create_refresh_token
+from app.core.security import create_access_token, create_refresh_token, get_password_hash, verify_password
 from jose import jwt, JWTError
 
 logger = structlog.get_logger(__name__)
@@ -59,6 +59,82 @@ class AuthService:
             
         logger.error("Failed to generate a unique username", max_attempts=max_attempts)
         raise ValueError("Could not generate a unique username")
+
+    def _dto_to_domain(self, dto) -> UserDomain:
+        return UserDomain(
+            id=dto.id,
+            username=dto.username,
+            pfp_hash=dto.pfp_hash,
+            is_anonymous=dto.is_anonymous,
+            is_superadmin=dto.is_superadmin,
+            role=dto.role
+        )
+
+    async def register(self, username: str, password: str) -> Tuple[UserDomain, str, str]:
+        logger.debug("Initiating user registration", username=username)
+        
+        existing = await self.user_repo.get_by_username(username)
+        if existing:
+            logger.warning("Registration failed: username already taken", username=username)
+            raise ValueError("Username is already taken")
+        
+        hashed = get_password_hash(password)
+        user_dto = await self.user_repo.create({
+            "username": username,
+            "hashed_password": hashed,
+            "is_anonymous": False,
+            "role": "normal"
+        })
+        
+        logger.info("User registered successfully", user_id=user_dto.id, username=username)
+        user_domain = self._dto_to_domain(user_dto)
+        access_token = create_access_token(subject=str(user_dto.id))
+        refresh_token = create_refresh_token(subject=str(user_dto.id))
+        return user_domain, access_token, refresh_token
+
+    async def login(self, username: str, password: str) -> Tuple[UserDomain, str, str]:
+        logger.debug("Initiating login", username=username)
+        
+        user_dto = await self.user_repo.get_by_username(username)
+        if not user_dto or not user_dto.hashed_password:
+            logger.warning("Login failed: user not found", username=username)
+            raise ValueError("Invalid credentials")
+        
+        if not verify_password(password, user_dto.hashed_password):
+            logger.warning("Login failed: invalid password", username=username)
+            raise ValueError("Invalid credentials")
+        
+        logger.info("User logged in successfully", user_id=user_dto.id, username=username)
+        user_domain = self._dto_to_domain(user_dto)
+        access_token = create_access_token(subject=str(user_dto.id))
+        refresh_token = create_refresh_token(subject=str(user_dto.id))
+        return user_domain, access_token, refresh_token
+
+    async def get_me(self, user_id: int) -> UserDomain:
+        logger.debug("Fetching user profile", user_id=user_id)
+        
+        if user_id < 0:
+            import json
+            user_data_str = await self.cache_manager.get(f"anon_user:{user_id}")
+            if not user_data_str:
+                logger.warning("Anonymous user not found in cache", user_id=user_id)
+                raise ValueError("Session expired")
+            data = json.loads(user_data_str)
+            return UserDomain(
+                id=data["id"],
+                username=data["username"],
+                pfp_hash=data["pfp_hash"],
+                is_anonymous=data["is_anonymous"],
+                is_superadmin=data["is_superadmin"],
+                role=data["role"]
+            )
+        
+        user_dto = await self.user_repo.get_by_id(user_id)
+        if not user_dto:
+            logger.warning("User not found", user_id=user_id)
+            raise ValueError("User not found")
+        
+        return self._dto_to_domain(user_dto)
 
     async def anonymous_join(self) -> Tuple[UserDomain, str, str]:
         logger.debug("Initiating anonymous join flow")

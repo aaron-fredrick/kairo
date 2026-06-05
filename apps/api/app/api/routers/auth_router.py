@@ -29,26 +29,69 @@ async def refresh_token(
             detail=str(e)
         )
 
+@router.post("/register", response_model=UserJoinResponseSchema, status_code=status.HTTP_201_CREATED)
+async def register(
+    register_data: UserRegisterSchema,
+    service: AuthService = Depends(get_auth_service)
+):
+    if not register_data.username or not register_data.password:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Username and password are required"
+        )
+    try:
+        user_domain, access_token, refresh_token = await service.register(
+            register_data.username,
+            register_data.password
+        )
+        return UserJoinResponseSchema(
+            user=UserResponseSchema(
+                id=user_domain.id,
+                username=user_domain.username,
+                is_superadmin=user_domain.is_superadmin,
+                role=user_domain.role,
+                pfp_hash=user_domain.pfp_hash
+            ),
+            token=TokenSchema(access_token=access_token, refresh_token=refresh_token, token_type="bearer")
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+
 @router.post("/login", response_model=TokenSchema)
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     service: AuthService = Depends(get_auth_service)
 ):
-    pass
-
-@router.post("/register", response_model=UserResponseSchema)
-async def register(
-    register_data: UserRegisterSchema,
-    service: AuthService = Depends(get_auth_service)
-):
-    pass
+    try:
+        _, access_token, refresh_token = await service.login(form_data.username, form_data.password)
+        return TokenSchema(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            token_type="bearer"
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e),
+            headers={"WWW-Authenticate": "Bearer"}
+        )
 
 @router.get("/me", response_model=UserResponseSchema)
 async def get_me(
     user_id: int = Depends(get_current_user_id),
     service: AuthService = Depends(get_auth_service)
 ):
-    pass
+    try:
+        user_domain = await service.get_me(user_id)
+        return UserResponseSchema(
+            id=user_domain.id,
+            username=user_domain.username,
+            is_superadmin=user_domain.is_superadmin,
+            role=user_domain.role,
+            pfp_hash=user_domain.pfp_hash
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 @router.post("/join", response_model=UserJoinResponseSchema)
 async def anonymous_join(
