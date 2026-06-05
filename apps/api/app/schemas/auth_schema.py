@@ -9,14 +9,6 @@ class TokenSchema(BaseModel):
 class RefreshTokenRequestSchema(BaseModel):
     refresh_token: str
 
-class UserLoginSchema(BaseModel):
-    username: str
-    password: str
-
-class UserRegisterSchema(BaseModel):
-    username: Optional[str] = None
-    password: Optional[str] = None
-
 class UserResponseSchema(BaseModel):
     id: int
     username: str
