@@ -78,3 +78,5 @@ Caddyfile
 !Caddyfile.dev.example
 ngrok.yml
 apps/apps.code-workspace
+
+postman/
