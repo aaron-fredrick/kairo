@@ -23,6 +23,10 @@ class Settings(BaseSettings):
         "http://localhost,http://127.0.0.1,http://localhost:5173,http://127.0.0.1:5173"
     )
 
+    # Observability
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "DEBUG").upper()
+    OTEL_ENABLED: bool = os.getenv("OTEL_ENABLED", "False").lower() in ("true", "1", "t", "yes", "y")
+
     # Database
     DB_HOST: str = os.getenv("DB_HOST", "localhost")
     DB_PORT: int = int(os.getenv("DB_PORT", "5432"))

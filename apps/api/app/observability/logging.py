@@ -2,15 +2,22 @@ import structlog
 import logging
 import sys
 from opentelemetry.sdk._logs import LoggingHandler
-
-# TODO: Add OpenTelemetry logging handler to send logs to OpenTelemetry Collector
+from app.core.config import settings
 
 def setup_logging():
+    log_level = getattr(logging, settings.LOG_LEVEL.upper(), logging.DEBUG)
+    
+    # Configure standard logging
+    handlers = [logging.StreamHandler(sys.stdout)]
+    if settings.OTEL_ENABLED:
+        handlers.append(LoggingHandler())
+
     logging.basicConfig(
         format="%(message)s",
-        stream=sys.stdout,
-        level=logging.INFO,
+        level=log_level,
+        handlers=handlers
     )
+    
     structlog.configure(
         processors=[
             structlog.stdlib.filter_by_level,
