@@ -5,10 +5,29 @@ import structlog
 from app.api.dependencies.auth import get_current_user_id, get_current_user_id_optional
 from app.api.dependencies.services import get_auth_service
 from app.application.services.auth_service import AuthService
-from app.schemas.auth_schema import TokenSchema, UserRegisterSchema, UserResponseSchema, UserLoginSchema, UserJoinResponseSchema
+from app.schemas.auth_schema import TokenSchema, UserRegisterSchema, UserResponseSchema, UserLoginSchema, UserJoinResponseSchema, RefreshTokenRequestSchema
 
 logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/auth", tags=["Auth"])
+
+@router.post("/refresh", response_model=TokenSchema)
+async def refresh_token(
+    request: RefreshTokenRequestSchema,
+    service: AuthService = Depends(get_auth_service)
+):
+    try:
+        new_access_token, new_refresh_token = await service.refresh_session(request.refresh_token)
+        return TokenSchema(
+            access_token=new_access_token,
+            refresh_token=new_refresh_token,
+            token_type="bearer"
+        )
+    except ValueError as e:
+        logger.warning("Failed to refresh token", error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e)
+        )
 
 @router.post("/login", response_model=TokenSchema)
 async def login(
@@ -44,7 +63,7 @@ async def anonymous_join(
             detail="User already registered and authenticated"
         )
         
-    user_domain, token = await service.anonymous_join()
+    user_domain, access_token, refresh_token = await service.anonymous_join()
     
     return UserJoinResponseSchema(
         user=UserResponseSchema(
@@ -54,5 +73,5 @@ async def anonymous_join(
             role=user_domain.role,
             pfp_hash=user_domain.pfp_hash
         ),
-        token=TokenSchema(access_token=token, token_type="bearer")
+        token=TokenSchema(access_token=access_token, refresh_token=refresh_token, token_type="bearer")
     )

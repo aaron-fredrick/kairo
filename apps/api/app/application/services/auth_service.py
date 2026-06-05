@@ -7,7 +7,8 @@ from app.core.config import settings
 from app.infrastructure.repositories.user_repository import UserRepository
 from app.infrastructure.cache.cache_manager import CacheManager
 from app.domain.models.user_domain import UserDomain
-from app.core.security import create_access_token
+from app.core.security import create_access_token, create_refresh_token
+from jose import jwt, JWTError
 
 logger = structlog.get_logger(__name__)
 
@@ -58,7 +59,7 @@ class AuthService:
         logger.error("Failed to generate a unique username", max_attempts=max_attempts)
         raise ValueError("Could not generate a unique username")
 
-    async def anonymous_join(self) -> Tuple[UserDomain, str]:
+    async def anonymous_join(self) -> Tuple[UserDomain, str, str]:
         logger.debug("Initiating anonymous join flow")
         username = await self._generate_unique_username()
         
@@ -77,8 +78,8 @@ class AuthService:
             role="normal"
         )
         
-        # TTL matches JWT token expiry exactly
-        ttl = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+        # TTL matches refresh token expiry exactly, so anonymous user exists as long as they can refresh
+        ttl = settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
         user_data = {
             "id": user_domain.id,
             "username": user_domain.username,
@@ -95,9 +96,51 @@ class AuthService:
         
         logger.debug("Anonymous user created in cache successfully", user_id=user_id, ttl=ttl)
         
-        # Create token
-        logger.debug("Generating access token for anonymous user", user_id=user_id)
-        token = create_access_token(subject=str(user_id))
+        # Create tokens
+        logger.debug("Generating tokens for anonymous user", user_id=user_id)
+        access_token = create_access_token(subject=str(user_id))
+        refresh_token = create_refresh_token(subject=str(user_id))
         
         logger.debug("Anonymous join flow completed successfully", user_id=user_id)
-        return user_domain, token
+        return user_domain, access_token, refresh_token
+
+    async def refresh_session(self, refresh_token: str) -> Tuple[str, str]:
+        import json
+        try:
+            payload = jwt.decode(refresh_token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+            user_id_str = payload.get("sub")
+            token_type = payload.get("type")
+            
+            if not user_id_str or token_type != "refresh":
+                logger.error("Invalid refresh token format or type", user_id=user_id_str, type=token_type)
+                raise ValueError("Invalid refresh token")
+                
+            user_id = int(user_id_str)
+            
+            # If user is anonymous, check cache
+            if user_id < 0:
+                user_data_str = await self.cache_manager.get(f"anon_user:{user_id}")
+                if not user_data_str:
+                    logger.warning("Anonymous user cache expired during refresh attempt", user_id=user_id)
+                    raise ValueError("Session expired")
+                    
+                # Extend cache TTL
+                ttl = settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
+                await self.cache_manager.set(f"anon_user:{user_id}", user_data_str, ttl=ttl)
+                logger.debug("Extended anonymous user cache TTL", user_id=user_id)
+            else:
+                # Registered user, check DB
+                user = await self.user_repo.get_by_id(user_id)
+                if not user:
+                    logger.warning("Registered user not found during refresh attempt", user_id=user_id)
+                    raise ValueError("User not found")
+            
+            new_access_token = create_access_token(subject=str(user_id))
+            new_refresh_token = create_refresh_token(subject=str(user_id))
+            
+            logger.info("Session refreshed successfully", user_id=user_id)
+            return new_access_token, new_refresh_token
+            
+        except JWTError as e:
+            logger.error("JWT Error during refresh", error=str(e))
+            raise ValueError("Invalid or expired refresh token")

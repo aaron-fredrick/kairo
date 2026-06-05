@@ -3,7 +3,11 @@ from typing import Optional
 
 class TokenSchema(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str
+
+class RefreshTokenRequestSchema(BaseModel):
+    refresh_token: str
 
 class UserLoginSchema(BaseModel):
     username: str
