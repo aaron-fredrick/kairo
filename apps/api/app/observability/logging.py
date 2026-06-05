@@ -41,8 +41,23 @@ def setup_logging():
     ]
 
     # 1. Terminal Console Formatter
+    level_styles = {
+        "critical": "magenta",
+        "exception": "magenta",
+        "error": "red",
+        "warn": "yellow",
+        "warning": "yellow",
+        "info": "green",
+        "debug": "blue",
+        "notset": "default",
+    }
+    
     console_formatter = structlog.stdlib.ProcessorFormatter(
-        processor=structlog.dev.ConsoleRenderer(colors=True, exception_formatter=structlog.dev.plain_traceback),
+        processor=structlog.dev.ConsoleRenderer(
+            colors=True, 
+            exception_formatter=structlog.dev.plain_traceback,
+            level_styles=level_styles
+        ),
         foreign_pre_chain=foreign_pre_chain,
     )
     console_handler = logging.StreamHandler(sys.stdout)
@@ -67,8 +82,17 @@ def setup_logging():
     for handler in handlers:
         root_logger.addHandler(handler)
 
-    # Hijack Uvicorn loggers to use our structlog handlers
-    for logger_name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
-        ulogger = logging.getLogger(logger_name)
-        ulogger.handlers.clear()
-        ulogger.propagate = True
+    # Hijack Uvicorn, SQLAlchemy, and other foreign loggers
+    foreign_loggers = (
+        "uvicorn", 
+        "uvicorn.error", 
+        "uvicorn.access",
+        "sqlalchemy",
+        "sqlalchemy.engine",
+        "sqlalchemy.engine.Engine",
+        "aiosqlite"
+    )
+    for logger_name in foreign_loggers:
+        f_logger = logging.getLogger(logger_name)
+        f_logger.handlers.clear()
+        f_logger.propagate = True
