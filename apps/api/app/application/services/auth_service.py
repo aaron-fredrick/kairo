@@ -60,81 +60,91 @@ class AuthService:
         logger.error("Failed to generate a unique username", max_attempts=max_attempts)
         raise ValueError("Could not generate a unique username")
 
-    def _dto_to_domain(self, dto) -> UserDomain:
+    def _cache_key_for_user(self, user_id: int) -> str:
+        return f"anon_user:{user_id}" if user_id < 0 else f"user:{user_id}"
+
+    def _build_user_domain(self, data: dict) -> UserDomain:
         return UserDomain(
-            id=dto.id,
-            username=dto.username,
-            pfp_hash=dto.pfp_hash,
-            is_anonymous=dto.is_anonymous,
-            is_superadmin=dto.is_superadmin,
-            role=dto.role
+            id=data["id"],
+            username=data["username"],
+            pfp_hash=data.get("pfp_hash"),
+            is_anonymous=data["is_anonymous"],
+            is_superadmin=data["is_superadmin"],
+            role=data["role"]
         )
+
+    async def _get_user_from_cache(self, user_id: int) -> dict:
+        import json
+        key = self._cache_key_for_user(user_id)
+        raw = await self.cache_manager.get(key)
+        if not raw:
+            logger.warning("User not found in cache", user_id=user_id)
+            raise ValueError("Session expired")
+        return json.loads(raw)
+
+    async def _save_user_to_cache(self, user_id: int, user_data: dict, ttl: int) -> None:
+        import json
+        key = self._cache_key_for_user(user_id)
+        await self.cache_manager.set(key, json.dumps(user_data), ttl=ttl)
 
     async def register(self, username: str, password: str) -> Tuple[UserDomain, str, str]:
         logger.debug("Initiating user registration", username=username)
-        
-        existing = await self.user_repo.get_by_username(username)
-        if existing:
+
+        username_key = f"user_by_username:{username}"
+        if await self.cache_manager.exists(username_key):
             logger.warning("Registration failed: username already taken", username=username)
             raise ValueError("Username is already taken")
-        
+
+        user_id = random.randint(1_000_000, 9_999_999)
         hashed = get_password_hash(password)
-        user_dto = await self.user_repo.create({
+        ttl = settings.REFRESH_TOKEN_EXPIRE_MINUTES * 60
+        user_data = {
+            "id": user_id,
             "username": username,
             "hashed_password": hashed,
+            "pfp_hash": None,
             "is_anonymous": False,
+            "is_superadmin": False,
             "role": "normal"
-        })
-        
-        logger.info("User registered successfully", user_id=user_dto.id, username=username)
-        user_domain = self._dto_to_domain(user_dto)
-        access_token = create_access_token(subject=str(user_dto.id))
-        refresh_token = create_refresh_token(subject=str(user_dto.id))
+        }
+        await self._save_user_to_cache(user_id, user_data, ttl)
+        await self.cache_manager.set(username_key, str(user_id), ttl=ttl)
+
+        logger.info("User registered in cache successfully", user_id=user_id, username=username)
+        user_domain = self._build_user_domain(user_data)
+        access_token = create_access_token(subject=str(user_id))
+        refresh_token = create_refresh_token(subject=str(user_id))
         return user_domain, access_token, refresh_token
 
     async def login(self, username: str, password: str) -> Tuple[UserDomain, str, str]:
+        import json
         logger.debug("Initiating login", username=username)
-        
-        user_dto = await self.user_repo.get_by_username(username)
-        if not user_dto or not user_dto.hashed_password:
-            logger.warning("Login failed: user not found", username=username)
+
+        username_key = f"user_by_username:{username}"
+        user_id_str = await self.cache_manager.get(username_key)
+        if not user_id_str:
+            logger.warning("Login failed: user not found in cache", username=username)
             raise ValueError("Invalid credentials")
-        
-        if not verify_password(password, user_dto.hashed_password):
+
+        user_id = int(user_id_str)
+        user_data = await self._get_user_from_cache(user_id)
+
+        hashed_password = user_data.get("hashed_password")
+        if not hashed_password or not verify_password(password, hashed_password):
             logger.warning("Login failed: invalid password", username=username)
             raise ValueError("Invalid credentials")
-        
-        logger.info("User logged in successfully", user_id=user_dto.id, username=username)
-        user_domain = self._dto_to_domain(user_dto)
-        access_token = create_access_token(subject=str(user_dto.id))
-        refresh_token = create_refresh_token(subject=str(user_dto.id))
+
+        logger.info("User logged in successfully", user_id=user_id, username=username)
+        user_domain = self._build_user_domain(user_data)
+        access_token = create_access_token(subject=str(user_id))
+        refresh_token = create_refresh_token(subject=str(user_id))
         return user_domain, access_token, refresh_token
 
     async def get_me(self, user_id: int) -> UserDomain:
         logger.debug("Fetching user profile", user_id=user_id)
-        
-        if user_id < 0:
-            import json
-            user_data_str = await self.cache_manager.get(f"anon_user:{user_id}")
-            if not user_data_str:
-                logger.warning("Anonymous user not found in cache", user_id=user_id)
-                raise ValueError("Session expired")
-            data = json.loads(user_data_str)
-            return UserDomain(
-                id=data["id"],
-                username=data["username"],
-                pfp_hash=data["pfp_hash"],
-                is_anonymous=data["is_anonymous"],
-                is_superadmin=data["is_superadmin"],
-                role=data["role"]
-            )
-        
-        user_dto = await self.user_repo.get_by_id(user_id)
-        if not user_dto:
-            logger.warning("User not found", user_id=user_id)
-            raise ValueError("User not found")
-        
-        return self._dto_to_domain(user_dto)
+        data = await self._get_user_from_cache(user_id)
+        return self._build_user_domain(data)
+
 
     async def anonymous_join(self) -> Tuple[UserDomain, str, str]:
         logger.debug("Initiating anonymous join flow")
@@ -213,11 +223,14 @@ class AuthService:
                     
                 logger.debug("Extended anonymous user cache TTL", user_id=user_id)
             else:
-                # Registered user, check DB
-                user = await self.user_repo.get_by_id(user_id)
-                if not user:
-                    logger.warning("Registered user not found during refresh attempt", user_id=user_id)
-                    raise ValueError("User not found")
+                # Registered user — resolve from cache and extend TTL
+                ttl = settings.REFRESH_TOKEN_EXPIRE_MINUTES * 60
+                user_data = await self._get_user_from_cache(user_id)
+                username = user_data.get("username")
+                await self._save_user_to_cache(user_id, user_data, ttl)
+                if username:
+                    await self.cache_manager.set(f"user_by_username:{username}", str(user_id), ttl=ttl)
+                logger.debug("Extended registered user cache TTL", user_id=user_id)
             
             new_access_token = create_access_token(subject=str(user_id))
             new_refresh_token = create_refresh_token(subject=str(user_id))
