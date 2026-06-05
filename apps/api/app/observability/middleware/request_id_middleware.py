@@ -1,7 +1,6 @@
 from fastapi import Request
 import uuid
-
-from app.context import request_id_ctx
+import structlog
 
 async def request_id_middleware(request: Request, call_next):
     request_id = request.headers.get("X-Request-ID")
@@ -11,7 +10,7 @@ async def request_id_middleware(request: Request, call_next):
         
     request.state.request_id = request_id
     
-    request_id_ctx.set(request_id)
+    structlog.contextvars.bind_contextvars(request_id=request_id)
 
     response = await call_next(request)
 
