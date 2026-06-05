@@ -40,16 +40,19 @@ def setup_logging():
         structlog.processors.format_exc_info,
     ]
 
+    import colorama
+    colorama.init(autoreset=True)
+    
     # 1. Terminal Console Formatter
     level_styles = {
-        "CRITICAL": "magenta",
-        "EXCEPTION": "magenta",
-        "ERROR": "red",
-        "WARN": "yellow",
-        "WARNING": "yellow",
-        "INFO": "green",
-        "DEBUG": "blue",
-        "NOTSET": "default",
+        "CRITICAL": colorama.Fore.MAGENTA,
+        "EXCEPTION": colorama.Fore.MAGENTA,
+        "ERROR": colorama.Fore.RED,
+        "WARN": colorama.Fore.YELLOW,
+        "WARNING": colorama.Fore.YELLOW,
+        "INFO": colorama.Fore.GREEN,
+        "DEBUG": colorama.Fore.BLUE,
+        "NOTSET": "",
     }
     padded_level_styles = {f"{k:^8}": v for k, v in level_styles.items()}
     
