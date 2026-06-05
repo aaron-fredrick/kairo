@@ -1,7 +1,7 @@
 flowchart TB
     %% ── External Actors ──────────────────────────────────────────────────
-    ClientApp["Client Application\n[Web / Mobile]"]
-    LB["Load Balancer / Reverse Proxy\n[nginx / Caddy]"]
+    ClientApp["Client Application<br/>[Web / Mobile]"]
+    LB["Load Balancer / Reverse Proxy<br/>[nginx / Caddy]"]
 
     %% ── Kairo API System Boundary ────────────────────────────────────────
     subgraph KairoAPI["Kairo API  [FastAPI Application]"]
@@ -9,42 +9,42 @@ flowchart TB
 
         subgraph API["API Layer"]
             direction LR
-            Routers["Routers\n[FastAPI APIRouter]\nauth, messages, rooms,\npresence, attachments"]
-            Deps["Dependency Injection\n[FastAPI Depends]\nauth, db, repos, services"]
-            Schemas["Request/Response Schemas\n[Pydantic]\n*Schema classes"]
-            Health["Health Endpoint\n[GET /health]"]
+            Routers["Routers<br/>[FastAPI APIRouter]<br/>auth, messages, rooms,<br/>presence, attachments"]
+            Deps["Dependency Injection<br/>[FastAPI Depends]<br/>auth, db, repos, services"]
+            Schemas["Request/Response Schemas<br/>[Pydantic]<br/>*Schema classes"]
+            Health["Health Endpoint<br/>[GET /health]"]
         end
 
         subgraph App["Application Layer"]
             direction LR
-            MsgSvc["MessageService\n[Python class]\nOrchestrates message CRUD\nand policy enforcement"]
-            AttSvc["AttachmentService\n[Python class]\nOrchestrates attachment retrieval"]
-            PresSvc["PresenceService\n[Python class]\nHeartbeat and online-user tracking"]
+            MsgSvc["MessageService<br/>[Python class]<br/>Orchestrates message CRUD<br/>and policy enforcement"]
+            AttSvc["AttachmentService<br/>[Python class]<br/>Orchestrates attachment retrieval"]
+            PresSvc["PresenceService<br/>[Python class]<br/>Heartbeat and online-user tracking"]
         end
 
         subgraph Domain["Domain Layer"]
             direction LR
-            Models["Domain Models\n[Python dataclasses]\nMessageDomain, UserDomain,\nRoomDomain, AttachmentDomain"]
-            Policies["Domain Policies\n[Pure Python]\nMessagePolicy"]
+            Models["Domain Models<br/>[Python dataclasses]<br/>MessageDomain, UserDomain,<br/>RoomDomain, AttachmentDomain"]
+            Policies["Domain Policies<br/>[Pure Python]<br/>MessagePolicy"]
         end
 
         subgraph Infra["Infrastructure Layer"]
             direction LR
-            Repos["Repositories\n[SQLAlchemy async]\nMessage, Attachment,\nRoom, User"]
-            ORM["ORM Models\n[SQLAlchemy mapped]\nMessageORM, UserORM,\nRoomORM, AttachmentORM,\nUploadORM, DirectMessageORM"]
-            DTOs["DTOs\n[Python dataclasses]\nMessageDTO, AttachmentDTO,\nRoomDTO, UserDTO"]
-            CacheInfra["Cache Manager\n[Redis]\nPresence and session cache"]
-            StorageInfra["Storage Client\n[S3 / MinIO]\nFile upload and presigned URLs"]
+            Repos["Repositories<br/>[SQLAlchemy async]<br/>Message, Attachment,<br/>Room, User"]
+            ORM["ORM Models<br/>[SQLAlchemy mapped]<br/>MessageORM, UserORM,<br/>RoomORM, AttachmentORM,<br/>UploadORM, DirectMessageORM"]
+            DTOs["DTOs<br/>[Python dataclasses]<br/>MessageDTO, AttachmentDTO,<br/>RoomDTO, UserDTO"]
+            CacheInfra["Cache Manager<br/>[Redis]<br/>Presence and session cache"]
+            StorageInfra["Storage Client<br/>[S3 / MinIO]<br/>File upload and presigned URLs"]
         end
 
-        Observability["Observability\n[structlog + OpenTelemetry]\nRequest tracing, metrics,\nstructured JSON logging"]
-        Container["AppContainer\n[Composition Root]\nWires Redis, Cache, Events\nat application startup"]
+        Observability["Observability<br/>[structlog + OpenTelemetry]<br/>Request tracing, metrics,<br/>structured JSON logging"]
+        Container["AppContainer<br/>[Composition Root]<br/>Wires Redis, Cache, Events<br/>at application startup"]
     end
 
     %% ── External Systems ─────────────────────────────────────────────────
-    PostgreSQL[("PostgreSQL\n[Relational DB]")]
-    Redis[("Redis\n[Cache / Pub-Sub]")]
-    S3[("S3 / MinIO\n[Object Storage]")]
+    PostgreSQL[("PostgreSQL<br/>[Relational DB]")]
+    Redis[("Redis<br/>[Cache / Pub-Sub]")]
+    S3[("S3 / MinIO<br/>[Object Storage]")]
 
     %% ── Flows ────────────────────────────────────────────────────────────
     ClientApp -->|"HTTPS"| LB

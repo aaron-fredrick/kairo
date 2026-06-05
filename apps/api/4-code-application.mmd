@@ -5,25 +5,25 @@ flowchart TB
     subgraph AppLayer["Application Layer  [app/application/services/]"]
         direction TB
 
-        MsgSvc["message_service.py\nMessageService\n─────────────────────────────\n+ get_message(message_id, user_id) → MessageDomain\n+ send_message(content, sender_id, room_id) → MessageDomain\n+ delete_message(message_id, user_id) → None"]
+        MsgSvc["message_service.py<br/>MessageService<br/>─────────────────────────────<br/>+ get_message(message_id, user_id) → MessageDomain<br/>+ send_message(content, sender_id, room_id) → MessageDomain<br/>+ delete_message(message_id, user_id) → None"]
 
-        AttSvc["attachment_service.py\nAttachmentService\n─────────────────────────────\n+ get_attachments_for_message(message_id) → list[AttachmentDomain]"]
+        AttSvc["attachment_service.py<br/>AttachmentService<br/>─────────────────────────────<br/>+ get_attachments_for_message(message_id) → list[AttachmentDomain]"]
 
-        PresSvc["presence_service.py\nPresenceService\n─────────────────────────────\n+ update_heartbeat(user_id) → datetime\n+ get_online_users(threshold_seconds) → list[int]"]
+        PresSvc["presence_service.py<br/>PresenceService<br/>─────────────────────────────<br/>+ update_heartbeat(user_id) → datetime<br/>+ get_online_users(threshold_seconds) → list[int]"]
     end
 
     subgraph Domain["Domain Layer  [app/domain/]"]
-        MsgDomain["MessageDomain\nmessage_domain.py"]
-        AttDomain["AttachmentDomain\nattachment_domain.py"]
-        MsgPolicy["MessagePolicy\nmessage_policy.py\ncan_delete(user_id, message)"]
+        MsgDomain["MessageDomain<br/>message_domain.py"]
+        AttDomain["AttachmentDomain<br/>attachment_domain.py"]
+        MsgPolicy["MessagePolicy<br/>message_policy.py<br/>can_delete(user_id, message)"]
     end
 
     subgraph Repos["Infrastructure – Repositories"]
-        MsgRepo["MessageRepository\nmessage_repository.py"]
-        AttRepo["AttachmentRepository\nattachment_repository.py"]
+        MsgRepo["MessageRepository<br/>message_repository.py"]
+        AttRepo["AttachmentRepository<br/>attachment_repository.py"]
     end
 
-    CacheMgr["Infrastructure – Cache\nCacheManager\nget/set presence heartbeats"]
+    CacheMgr["Infrastructure – Cache<br/>CacheManager<br/>get/set presence heartbeats"]
 
     %% ── Flows ─────────────────────────────────────────────────────────────
     MsgSvc -->|"Injects & calls"| MsgRepo

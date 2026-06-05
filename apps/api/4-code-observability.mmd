@@ -6,36 +6,36 @@ flowchart TB
         direction TB
 
         subgraph Obs["app/observability/"]
-            ObsInit["__init__.py\nsetup(app) → None\nCalls: setup_logging()\n       setup_tracing()\n       setup_metrics()"]
+            ObsInit["__init__.py<br/>setup(app) → None<br/>Calls: setup_logging()<br/>       setup_tracing()<br/>       setup_metrics()"]
 
-            Logging["logging.py\nsetup_logging()\nConfigures structlog:\n  - JSON renderer\n  - ISO timestamps\n  - Log level filter\n  - OpenTelemetry log handler"]
+            Logging["logging.py<br/>setup_logging()<br/>Configures structlog:<br/>  - JSON renderer<br/>  - ISO timestamps<br/>  - Log level filter<br/>  - OpenTelemetry log handler"]
 
-            Tracing["tracing.py\nsetup_tracing()\nOpenTelemetry TracerProvider\nOTLP gRPC exporter"]
+            Tracing["tracing.py<br/>setup_tracing()<br/>OpenTelemetry TracerProvider<br/>OTLP gRPC exporter"]
 
-            Metrics["metrics.py\nsetup_metrics()\nOpenTelemetry MeterProvider\nPrometheus / OTLP exporter"]
+            Metrics["metrics.py<br/>setup_metrics()<br/>OpenTelemetry MeterProvider<br/>Prometheus / OTLP exporter"]
 
-            OTel["otel.py\nOTLP exporter configuration\nResource attributes:\n  service.name = kairo-api\n  deployment.environment"]
+            OTel["otel.py<br/>OTLP exporter configuration<br/>Resource attributes:<br/>  service.name = kairo-api<br/>  deployment.environment"]
 
             subgraph Middleware["app/observability/middleware/"]
-                ReqIDMw["request_id_middleware.py\nrequest_id_middleware()\nGenerates X-Request-ID if absent\nBinds to structlog contextvars\nPropagates header in response"]
-                MetricsMw["metrics_middleware.py\nmetrics_middleware()\nRecords HTTP request duration\nand status code counters"]
+                ReqIDMw["request_id_middleware.py<br/>request_id_middleware()<br/>Generates X-Request-ID if absent<br/>Binds to structlog contextvars<br/>Propagates header in response"]
+                MetricsMw["metrics_middleware.py<br/>metrics_middleware()<br/>Records HTTP request duration<br/>and status code counters"]
             end
         end
 
         subgraph CoreLayer["app/core/"]
-            Config["config.py\nSettings (pydantic-settings)\n─────────────────────────────\nENV, DEBUG\nDATABASE_URL property\n  sqlite (dev) | asyncpg (prod)\nREDIS_URL\nSTORAGE_BACKEND, S3_*\nJWT_SECRET, JWT_ALGORITHM\nADJECTIVES_FILE, NOUNS_FILE\ncors_origins_list property\nvalidate_production()"]
+            Config["config.py<br/>Settings (pydantic-settings)<br/>─────────────────────────────<br/>ENV, DEBUG<br/>DATABASE_URL property<br/>  sqlite (dev) | asyncpg (prod)<br/>REDIS_URL<br/>STORAGE_BACKEND, S3_*<br/>JWT_SECRET, JWT_ALGORITHM<br/>ADJECTIVES_FILE, NOUNS_FILE<br/>cors_origins_list property<br/>validate_production()"]
 
-            Security["security.py\nverify_password(plain, hashed) → bool\nget_password_hash(password) → str\ncreate_access_token(subject, delta) → str\n─────────────────────────────\nPasslib bcrypt + python-jose"]
+            Security["security.py<br/>verify_password(plain, hashed) → bool<br/>get_password_hash(password) → str<br/>create_access_token(subject, delta) → str<br/>─────────────────────────────<br/>Passlib bcrypt + python-jose"]
         end
 
-        Container["app/container.py\nAppContainer\n─────────────────────────────\nredis: Redis client\ncache_manager: CacheManager\nevent_manager: EventManager\n─────────────────────────────\nclose() → None\nCalled by lifespan on shutdown"]
+        Container["app/container.py<br/>AppContainer<br/>─────────────────────────────<br/>redis: Redis client<br/>cache_manager: CacheManager<br/>event_manager: EventManager<br/>─────────────────────────────<br/>close() → None<br/>Called by lifespan on shutdown"]
 
-        Main["app/main.py\nFastAPI application factory\n─────────────────────────────\nlifespan():\n  check_db_connection()\n  check_storage_connection()\n  AppContainer() → app.state.container\nMiddleware chain:\n  request_id → metrics → CORS\nexception_handler(Exception)"]
+        Main["app/main.py<br/>FastAPI application factory<br/>─────────────────────────────<br/>lifespan():<br/>  check_db_connection()<br/>  check_storage_connection()<br/>  AppContainer() → app.state.container<br/>Middleware chain:<br/>  request_id → metrics → CORS<br/>exception_handler(Exception)"]
     end
 
     %% ── External Observability Backend ───────────────────────────────────
-    OTEL[("OpenTelemetry Collector\n[OTLP gRPC / HTTP]")]
-    Prometheus[("Prometheus / Grafana\n[Metrics scrape]")]
+    OTEL[("OpenTelemetry Collector<br/>[OTLP gRPC / HTTP]")]
+    Prometheus[("Prometheus / Grafana<br/>[Metrics scrape]")]
 
     %% ── Flows ─────────────────────────────────────────────────────────────
     Main -->|"Calls at startup"| ObsInit

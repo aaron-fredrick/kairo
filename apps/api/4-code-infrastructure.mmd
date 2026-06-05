@@ -8,49 +8,49 @@ flowchart TB
         direction TB
 
         subgraph DB["app/infrastructure/db/"]
-            Base["base.py\nBase = declarative_base()\nShared SQLAlchemy metadata"]
-            Session["session.py\nengine: AsyncEngine\nSessionFactory: async_sessionmaker\ncheck_db_connection() → None\nDialect-aware: sqlite or asyncpg"]
+            Base["base.py<br/>Base = declarative_base()<br/>Shared SQLAlchemy metadata"]
+            Session["session.py<br/>engine: AsyncEngine<br/>SessionFactory: async_sessionmaker<br/>check_db_connection() → None<br/>Dialect-aware: sqlite or asyncpg"]
 
             subgraph ORM["app/infrastructure/db/orm/"]
-                BaseORM["base_orm.py\nTimestampMixin\ncreated_at: DateTime\nupdated_at: DateTime"]
-                UserORM["user_orm.py\nUserORM\nid, username, hashed_password,\nrole: UserRole, is_superadmin"]
-                RoomORM["room_orm.py\nRoomORM\nid, name, created_by_id"]
-                MsgORM["message_orm.py\nMessageORM\nid, content, sender_id, room_id\n→ attachments: AttachmentORM"]
-                AttORM["attachment_orm.py\nAttachmentORM\nid, message_id, upload_id, filename"]
-                UploadORM["upload_orm.py\nUploadORM\nid, filename, s3_key,\ncontent_type, size_bytes"]
-                DMORM["direct_message_orm.py\nDirectMessageORM\nid, sender_id, receiver_id, content"]
+                BaseORM["base_orm.py<br/>TimestampMixin<br/>created_at: DateTime<br/>updated_at: DateTime"]
+                UserORM["user_orm.py<br/>UserORM<br/>id, username, hashed_password,<br/>role: UserRole, is_superadmin"]
+                RoomORM["room_orm.py<br/>RoomORM<br/>id, name, created_by_id"]
+                MsgORM["message_orm.py<br/>MessageORM<br/>id, content, sender_id, room_id<br/>→ attachments: AttachmentORM"]
+                AttORM["attachment_orm.py<br/>AttachmentORM<br/>id, message_id, upload_id, filename"]
+                UploadORM["upload_orm.py<br/>UploadORM<br/>id, filename, s3_key,<br/>content_type, size_bytes"]
+                DMORM["direct_message_orm.py<br/>DirectMessageORM<br/>id, sender_id, receiver_id, content"]
             end
         end
 
         subgraph RepoLayer["app/infrastructure/repositories/"]
-            BaseRepo["base_repository.py\nBaseRepository[ORM, DTO]\n─────────────────────────\nget_by_id(id) → DTO | None\nget_all() → list[DTO]\ncreate(data) → DTO\nupdate(id, data) → DTO | None\ndelete(id) → bool\n_to_dto() [abstract]"]
-            MsgRepo["message_repository.py\nMessageRepository\n_to_dto() → MessageDTO\nget_with_attachments(id) → MessageDTO | None"]
-            AttRepo["attachment_repository.py\nAttachmentRepository\n_to_dto() → AttachmentDTO\nget_by_message_id(id) → list[AttachmentDTO]"]
-            RoomRepo["room_repository.py\nRoomRepository\n_to_dto() → RoomDTO"]
-            UserRepo["user_repository.py\nUserRepository\n_to_dto() → UserDTO\nget_by_username(username) → UserDTO | None"]
+            BaseRepo["base_repository.py<br/>BaseRepository[ORM, DTO]<br/>─────────────────────────<br/>get_by_id(id) → DTO | None<br/>get_all() → list[DTO]<br/>create(data) → DTO<br/>update(id, data) → DTO | None<br/>delete(id) → bool<br/>_to_dto() [abstract]"]
+            MsgRepo["message_repository.py<br/>MessageRepository<br/>_to_dto() → MessageDTO<br/>get_with_attachments(id) → MessageDTO | None"]
+            AttRepo["attachment_repository.py<br/>AttachmentRepository<br/>_to_dto() → AttachmentDTO<br/>get_by_message_id(id) → list[AttachmentDTO]"]
+            RoomRepo["room_repository.py<br/>RoomRepository<br/>_to_dto() → RoomDTO"]
+            UserRepo["user_repository.py<br/>UserRepository<br/>_to_dto() → UserDTO<br/>get_by_username(username) → UserDTO | None"]
         end
 
         subgraph DTOLayer["app/infrastructure/dtos/"]
-            MsgDTO["message_dto.py\nMessageDTO\nid, content, sender_id,\nroom_id, created_at, updated_at"]
-            AttDTO["attachment_dto.py\nAttachmentDTO\nid, message_id, upload_id,\nfilename, created_at, updated_at"]
-            RoomDTO["room_dto.py\nRoomDTO\nid, name, created_at"]
-            UserDTO["user_dto.py\nUserDTO\nid, username, role, created_at"]
+            MsgDTO["message_dto.py<br/>MessageDTO<br/>id, content, sender_id,<br/>room_id, created_at, updated_at"]
+            AttDTO["attachment_dto.py<br/>AttachmentDTO<br/>id, message_id, upload_id,<br/>filename, created_at, updated_at"]
+            RoomDTO["room_dto.py<br/>RoomDTO<br/>id, name, created_at"]
+            UserDTO["user_dto.py<br/>UserDTO<br/>id, username, role, created_at"]
         end
 
         subgraph CacheLayer["app/infrastructure/cache/"]
-            CacheMgr["CacheManager\nget(key) → str | None\nset(key, value, ttl) → None\ndelete(key) → None\nkeys(pattern) → list[str]"]
+            CacheMgr["CacheManager<br/>get(key) → str | None<br/>set(key, value, ttl) → None<br/>delete(key) → None<br/>keys(pattern) → list[str]"]
         end
 
         subgraph StorageLayer["app/infrastructure/storage/"]
-            StorageClient["storage_client.py\nget_boto_client() → boto3.client | None\ncheck_storage_connection() → None\ngenerate_presigned_url(key, expiry) → str"]
+            StorageClient["storage_client.py<br/>get_boto_client() → boto3.client | None<br/>check_storage_connection() → None<br/>generate_presigned_url(key, expiry) → str"]
         end
     end
 
     %% ── External Systems ──────────────────────────────────────────────────
-    PG[("PostgreSQL\nasyncpg driver")]
-    SQLite[("SQLite\naiosqlite driver")]
-    Redis[("Redis\naioredis")]
-    S3[("S3 / MinIO\nboto3")]
+    PG[("PostgreSQL<br/>asyncpg driver")]
+    SQLite[("SQLite<br/>aiosqlite driver")]
+    Redis[("Redis<br/>aioredis")]
+    S3[("S3 / MinIO<br/>boto3")]
 
     %% ── Flows ─────────────────────────────────────────────────────────────
     BaseORM --> Base

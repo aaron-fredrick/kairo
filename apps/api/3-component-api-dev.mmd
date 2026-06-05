@@ -6,17 +6,17 @@ flowchart TB
     %%   - Storage is local filesystem under data/
     %%   - No load balancer; Uvicorn served directly with --reload
 
-    ClientApp["Browser / API Client\n[localhost:5173 or curl]"]
-    Uvicorn["Uvicorn Dev Server\nuv run uvicorn app.main:app --reload\n[127.0.0.1:8000]"]
+    ClientApp["Browser / API Client<br/>[localhost:5173 or curl]"]
+    Uvicorn["Uvicorn Dev Server<br/>uv run uvicorn app.main:app --reload<br/>[127.0.0.1:8000]"]
 
     subgraph KairoAPI["Kairo API  [FastAPI Application] – dev"]
         direction TB
 
         subgraph API["API Layer"]
             direction LR
-            Routers["Routers\nauth, messages, rooms,\npresence, attachments"]
-            Deps["Dependency Injection\nauth, db, repos, services"]
-            Schemas["Request/Response Schemas\n*Schema classes"]
+            Routers["Routers<br/>auth, messages, rooms,<br/>presence, attachments"]
+            Deps["Dependency Injection<br/>auth, db, repos, services"]
+            Schemas["Request/Response Schemas<br/>*Schema classes"]
             Health["GET /health"]
         end
 
@@ -29,27 +29,27 @@ flowchart TB
 
         subgraph Domain["Domain Layer"]
             direction LR
-            Models["Domain Models\nMessageDomain, UserDomain,\nRoomDomain, AttachmentDomain"]
-            Policies["Policies\nMessagePolicy"]
+            Models["Domain Models<br/>MessageDomain, UserDomain,<br/>RoomDomain, AttachmentDomain"]
+            Policies["Policies<br/>MessagePolicy"]
         end
 
         subgraph Infra["Infrastructure Layer"]
             direction LR
-            Repos["Repositories\nMessage, Attachment, Room, User"]
-            ORM["ORM Models\nSQLAlchemy mapped classes"]
-            DTOs["DTOs\nRepository output boundary"]
-            CacheInfra["Cache Manager\n[optional – Redis or no-op]"]
-            StorageInfra["Local Storage Client\n[data/blobs/ on disk]"]
+            Repos["Repositories<br/>Message, Attachment, Room, User"]
+            ORM["ORM Models<br/>SQLAlchemy mapped classes"]
+            DTOs["DTOs<br/>Repository output boundary"]
+            CacheInfra["Cache Manager<br/>[optional – Redis or no-op]"]
+            StorageInfra["Local Storage Client<br/>[data/blobs/ on disk]"]
         end
 
-        Observability["Observability\nstructlog console output\n(no OTLP exporter in dev)"]
-        Container["AppContainer\nComposition Root"]
+        Observability["Observability<br/>structlog console output<br/>(no OTLP exporter in dev)"]
+        Container["AppContainer<br/>Composition Root"]
     end
 
     %% ── Dev-specific external systems ─────────────────────────────────────
-    SQLite[("SQLite\nkairo.db\n[aiosqlite – file on disk]")]
-    Redis_dev[("Redis\n[optional, can be absent]")]
-    LocalFS[("Local Filesystem\ndata/blobs/\ndata/temp/")]
+    SQLite[("SQLite<br/>kairo.db<br/>[aiosqlite – file on disk]")]
+    Redis_dev[("Redis<br/>[optional, can be absent]")]
+    LocalFS[("Local Filesystem<br/>data/blobs/<br/>data/temp/")]
 
     %% ── Flows ─────────────────────────────────────────────────────────────
     ClientApp -->|"HTTP (no TLS)"| Uvicorn

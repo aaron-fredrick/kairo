@@ -6,35 +6,35 @@ flowchart TB
     subgraph APILayer["API Layer  [app/api/]"]
         direction TB
 
-        Router["router.py\napi_router = APIRouter(prefix='/api')\nMounts all sub-routers"]
+        Router["router.py<br/>api_router = APIRouter(prefix='/api')<br/>Mounts all sub-routers"]
 
         subgraph Routers["app/api/routers/"]
-            AuthRouter["auth_router.py\nPOST /auth/login\nPOST /auth/register\nGET  /auth/me\nPOST /auth/join"]
-            MsgRouter["messages_router.py\nGET  /messages/{id}"]
-            RoomRouter["rooms_router.py\nGET    /rooms\nPOST   /rooms\nGET    /rooms/{id}\nGET    /rooms/{id}/join\nGET    /rooms/{id}/leave\nPOST   /rooms/{id}/add_user\nGET    /rooms/{id}/messages"]
-            AttRouter["attachments_router.py\nPOST /attachments/upload/{msg_id}\nGET  /attachments/download/{id}\nGET  /attachments/{id}/thumbnail/{size}\nGET  /attachments/{id}"]
-            PresRouter["presence_router.py\nPOST /presence/heartbeat\nGET  /presence/online"]
+            AuthRouter["auth_router.py<br/>POST /auth/login<br/>POST /auth/register<br/>GET  /auth/me<br/>POST /auth/join"]
+            MsgRouter["messages_router.py<br/>GET  /messages/{id}"]
+            RoomRouter["rooms_router.py<br/>GET    /rooms<br/>POST   /rooms<br/>GET    /rooms/{id}<br/>GET    /rooms/{id}/join<br/>GET    /rooms/{id}/leave<br/>POST   /rooms/{id}/add_user<br/>GET    /rooms/{id}/messages"]
+            AttRouter["attachments_router.py<br/>POST /attachments/upload/{msg_id}<br/>GET  /attachments/download/{id}<br/>GET  /attachments/{id}/thumbnail/{size}<br/>GET  /attachments/{id}"]
+            PresRouter["presence_router.py<br/>POST /presence/heartbeat<br/>GET  /presence/online"]
         end
 
         subgraph Deps["app/api/dependencies/"]
-            AuthDep["auth.py\nget_current_user_id()\nDecodes JWT Bearer token"]
-            DBDep["db.py\nget_db_session()\nYields AsyncSession per request"]
-            RepoDep["repositories.py\nget_message_repo()\nget_attachment_repo()\nget_room_repo()\nget_user_repo()"]
-            SvcDep["services.py\nget_message_service()\nget_attachment_service()\nget_presence_service()"]
-            ContDep["container.py\nget_container()\nReads app.state.container"]
+            AuthDep["auth.py<br/>get_current_user_id()<br/>Decodes JWT Bearer token"]
+            DBDep["db.py<br/>get_db_session()<br/>Yields AsyncSession per request"]
+            RepoDep["repositories.py<br/>get_message_repo()<br/>get_attachment_repo()<br/>get_room_repo()<br/>get_user_repo()"]
+            SvcDep["services.py<br/>get_message_service()<br/>get_attachment_service()<br/>get_presence_service()"]
+            ContDep["container.py<br/>get_container()<br/>Reads app.state.container"]
         end
 
         subgraph Schemas["app/schemas/"]
-            MsgSchema["message_schema.py\nMessageCreateSchema\nMessageResponseSchema\nMessageWithAttachmentsResponseSchema"]
-            AttSchema["attachment_schema.py\nAttachmentResponseSchema\nUploadResponseSchema\nDownloadUrlResponseSchema\nThumbnailResponseSchema\nThumbnailSize"]
-            AuthSchema["auth_schema.py\nTokenSchema\nUserRegisterSchema\nUserLoginSchema\nUserResponseSchema"]
-            RoomSchema["room_schema.py\nRoomCreateSchema\nRoomResponseSchema"]
-            PresSchema["presence_schema.py\nPresenceUpdateResponseSchema\nOnlineUsersResponseSchema"]
-            CommonSchema["common_schema.py\nShared base schema types"]
+            MsgSchema["message_schema.py<br/>MessageCreateSchema<br/>MessageResponseSchema<br/>MessageWithAttachmentsResponseSchema"]
+            AttSchema["attachment_schema.py<br/>AttachmentResponseSchema<br/>UploadResponseSchema<br/>DownloadUrlResponseSchema<br/>ThumbnailResponseSchema<br/>ThumbnailSize"]
+            AuthSchema["auth_schema.py<br/>TokenSchema<br/>UserRegisterSchema<br/>UserLoginSchema<br/>UserResponseSchema"]
+            RoomSchema["room_schema.py<br/>RoomCreateSchema<br/>RoomResponseSchema"]
+            PresSchema["presence_schema.py<br/>PresenceUpdateResponseSchema<br/>OnlineUsersResponseSchema"]
+            CommonSchema["common_schema.py<br/>Shared base schema types"]
         end
 
-        Exceptions["exceptions.py\nRegister HTTP exception handlers:\n404 Not Found\n422 Unprocessable Entity\n500 Internal Server Error"]
-        Health["app/health.py\nGET /health\nHealthCheckResponse\n{status, version, services}"]
+        Exceptions["exceptions.py<br/>Register HTTP exception handlers:<br/>404 Not Found<br/>422 Unprocessable Entity<br/>500 Internal Server Error"]
+        Health["app/health.py<br/>GET /health<br/>HealthCheckResponse<br/>{status, version, services}"]
     end
 
     %% ── Dependency chain ─────────────────────────────────────────────────
