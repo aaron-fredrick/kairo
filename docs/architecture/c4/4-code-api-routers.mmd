@@ -1,0 +1,72 @@
+%%{init: {
+  "theme": "dark",
+  "flowchart": {
+    "nodeSpacing": 45,
+    "rankSpacing": 55
+  }
+}}%%
+
+classDiagram
+    namespace app_api_routers {
+        class AuthRouter {
+            +POST /auth/login
+            +POST /auth/register
+            +GET /auth/me
+            +POST /auth/join
+        }
+        class MessagesRouter {
+            +GET /messages/{id}
+        }
+        class RoomsRouter {
+            +GET /rooms
+            +POST /rooms
+            +GET /rooms/{id}
+            +POST /rooms/{id}/add_user
+        }
+        class AttachmentsRouter {
+            +POST /attachments/upload/{msg_id}
+            +GET /attachments/download/{id}
+            +GET /attachments/{id}/thumbnail/{size}
+        }
+        class PresenceRouter {
+            +POST /presence/heartbeat
+            +GET /presence/online
+        }
+    }
+
+    namespace app_api_dependencies {
+        class AuthDependency {
+            +get_current_user_id() int
+        }
+        class DBDependency {
+            +get_db_session() AsyncSession
+        }
+        class RepositoryDependency {
+            +get_message_repo()
+            +get_user_repo()
+        }
+        class ServiceDependency {
+            +get_message_service()
+            +get_presence_service()
+        }
+    }
+
+    namespace app_schemas {
+        class MessageSchema
+        class AttachmentSchema
+        class AuthSchema
+        class RoomSchema
+    }
+
+    AuthRouter ..> AuthDependency : uses
+    AuthRouter ..> AuthSchema : uses
+    MessagesRouter ..> AuthDependency : uses
+    MessagesRouter ..> ServiceDependency : uses
+    MessagesRouter ..> MessageSchema : uses
+    RoomsRouter ..> AuthDependency : uses
+    RoomsRouter ..> ServiceDependency : uses
+    RoomsRouter ..> RoomSchema : uses
+    AttachmentsRouter ..> AuthDependency : uses
+    AttachmentsRouter ..> AttachmentSchema : uses
+    PresenceRouter ..> AuthDependency : uses
+    PresenceRouter ..> ServiceDependency : uses

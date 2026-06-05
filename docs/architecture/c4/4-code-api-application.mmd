@@ -1,0 +1,49 @@
+%%{init: {
+  "theme": "dark",
+  "flowchart": {
+    "nodeSpacing": 45,
+    "rankSpacing": 55
+  }
+}}%%
+
+classDiagram
+    namespace app_application_services {
+        class MessageService {
+            +get_message(message_id, user_id) MessageDomain
+            +send_message(content, sender_id, room_id) MessageDomain
+            +delete_message(message_id, user_id) None
+        }
+        
+        class AttachmentService {
+            +get_attachments_for_message(message_id) list[AttachmentDomain]
+        }
+        
+        class PresenceService {
+            +update_heartbeat(user_id) datetime
+            +get_online_users(threshold_seconds) list[int]
+        }
+    }
+
+    namespace app_domain {
+        class MessageDomain
+        class AttachmentDomain
+        class MessagePolicy {
+            +can_delete(user_id, message) bool
+        }
+    }
+
+    namespace app_infrastructure {
+        class MessageRepository
+        class AttachmentRepository
+        class CacheManager
+    }
+
+    MessageService ..> MessageRepository : injects
+    MessageService ..> AttachmentRepository : injects
+    MessageService ..> MessagePolicy : applies
+    MessageService ..> MessageDomain : constructs / returns
+
+    AttachmentService ..> AttachmentRepository : injects
+    AttachmentService ..> AttachmentDomain : constructs / returns
+
+    PresenceService ..> CacheManager : injects reads/writes

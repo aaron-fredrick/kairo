@@ -1,0 +1,167 @@
+%%{init: {
+  "theme": "dark",
+  "flowchart": {
+    "nodeSpacing": 45,
+    "rankSpacing": 55
+  }
+}}%%
+
+flowchart TB
+
+    %% ─────────────────────────────────────────────────────────────────────────
+    %% EXTERNAL
+    %% ─────────────────────────────────────────────────────────────────────────
+    Internet["🌐 Internet"]
+
+    %% ─────────────────────────────────────────────────────────────────────────
+    %% DEPLOYMENT NODE: Docker Swarm Cluster
+    %% ─────────────────────────────────────────────────────────────────────────
+    subgraph Cluster["🖥  Docker Swarm Cluster  [Overlay Network: kairo_net]"]
+
+        %% ── Deployment Node: Manager Node (pinned) ───────────────────────────
+        subgraph ManagerNode["Manager Node  [Docker Engine]"]
+
+            subgraph Svc_Edge["Swarm Service: edge  ·  replicas: 1"]
+                C_Edge["«container»<br/>edge<br/>nginx:alpine<br/>:80"]
+            end
+
+        end
+
+        %% ── Deployment Node: Worker Nodes ────────────────────────────────────
+        subgraph WorkerNodes["Worker Nodes  [Docker Engine]  (1 → N nodes)"]
+
+            %% Application Services — each scales 1 → N replicas
+            subgraph Svc_Web["Swarm Service: web  ·  replicas: 1→N"]
+                C_Web["«container instance»<br/>web<br/>kairo/web:latest"]
+            end
+
+            subgraph Svc_API["Swarm Service: api  ·  replicas: 1→N"]
+                C_API["«container instance»<br/>api<br/>kairo/api:latest"]
+            end
+
+            subgraph Svc_WS["Swarm Service: ws  ·  replicas: 1→N"]
+                C_WS["«container instance»<br/>ws<br/>kairo/ws:latest"]
+            end
+
+            subgraph Svc_DBW["Swarm Service: worker_db  ·  replicas: 1→N"]
+                C_DBW["«container instance»<br/>worker_db<br/>kairo/worker-db:latest"]
+            end
+
+            subgraph Svc_BlobW["Swarm Service: worker_blob  ·  replicas: 1→N"]
+                C_BlobW["«container instance»<br/>worker_blob<br/>kairo/worker-blob:latest"]
+            end
+
+            subgraph Svc_ThumbW["Swarm Service: worker_thumbnail  ·  replicas: 1→N"]
+                C_ThumbW["«container instance»<br/>worker_thumbnail<br/>kairo/worker-thumbnail:latest"]
+            end
+
+            %% ── Deployment Node: Data stores (singletons) ────────────────────
+            subgraph Svc_PG["Swarm Service: postgres  ·  replicas: 1"]
+                direction LR
+                Vol_PG[("Volume<br/>pgdata")]
+                C_PG[("«container»<br/>postgres<br/>postgres:16<br/>:5432")]
+                Vol_PG --- C_PG
+            end
+
+            subgraph Svc_Redis["Swarm Service: redis  ·  replicas: 1"]
+                C_Redis[("«container»<br/>redis<br/>redis:7-alpine<br/>:6379")]
+            end
+
+            subgraph Svc_Minio["Swarm Service: storage  ·  replicas: 1"]
+                direction LR
+                Vol_Minio[("Volume<br/>minio")]
+                C_Minio[("«container»<br/>storage<br/>minio/minio<br/>:9000 · :9001")]
+                Vol_Minio --- C_Minio
+            end
+
+            %% ── Deployment Node: Observability stack (singletons) ────────────
+            subgraph Svc_OTEL["Swarm Service: otel  ·  replicas: 1"]
+                C_OTEL["«container»<br/>otel<br/>otel/opentelemetry-collector-contrib<br/>:4317 · :4318"]
+            end
+
+            subgraph Svc_Prom["Swarm Service: prometheus  ·  replicas: 1"]
+                C_Prom[("«container»<br/>prometheus<br/>prom/prometheus")]
+            end
+
+            subgraph Svc_Loki["Swarm Service: loki  ·  replicas: 1"]
+                C_Loki[("«container»<br/>loki<br/>grafana/loki:latest")]
+            end
+
+            subgraph Svc_Tempo["Swarm Service: tempo  ·  replicas: 1"]
+                C_Tempo[("«container»<br/>tempo<br/>grafana/tempo:latest")]
+            end
+
+            subgraph Svc_Grafana["Swarm Service: grafana  ·  replicas: 1"]
+                C_Grafana["«container»<br/>grafana<br/>grafana/grafana:latest<br/>:3000"]
+            end
+
+        end
+    end
+
+    %% ─────────────────────────────────────────────────────────────────────────
+    %% RELATIONSHIPS
+    %% ─────────────────────────────────────────────────────────────────────────
+
+    %% Ingress
+    Internet -->|"HTTP :80"| C_Edge
+
+    %% Edge → App Services
+    C_Edge -->|"HTTP (static)"| C_Web
+    C_Edge -->|"HTTP (REST)"| C_API
+    C_Edge <-->|"WebSocket"| C_WS
+
+    %% App Services → Data
+    C_API -->|"SQL"| C_PG
+    C_API -->|"Pub-Sub / XADD"| C_Redis
+    C_API -->|"S3 API"| C_Minio
+
+    C_WS -->|"SQL"| C_PG
+    C_WS -->|"Pub-Sub / XADD"| C_Redis
+
+    C_DBW -->|"XREADGROUP"| C_Redis
+    C_DBW -->|"SQL"| C_PG
+
+    C_BlobW -->|"XREADGROUP"| C_Redis
+    C_BlobW -->|"S3 API"| C_Minio
+    C_BlobW -->|"SQL"| C_PG
+
+    C_ThumbW -->|"XREADGROUP"| C_Redis
+    C_ThumbW -->|"S3 API"| C_Minio
+
+    %% App Services → OTel Collector (OTLP)
+    C_Web & C_API & C_WS & C_DBW & C_BlobW & C_ThumbW -->|"OTLP gRPC / HTTP"| C_OTEL
+
+    %% OTel → Backends
+    C_OTEL -->|"traces (OTLP)"| C_Tempo
+    C_OTEL -->|"logs (OTLP)"| C_Loki
+    C_Prom -->|"scrape /metrics"| C_OTEL
+
+    %% Grafana → Datasources
+    C_Grafana -->|"PromQL"| C_Prom
+    C_Grafana -->|"LogQL"| C_Loki
+    C_Grafana -->|"TraceQL"| C_Tempo
+
+    %% Long-term storage backends
+    C_Tempo -->|"Tempo bucket (S3 API)"| C_Minio
+    C_Loki -->|"Loki bucket (S3 API)"| C_Minio
+
+    %% ─────────────────────────────────────────────────────────────────────────
+    %% STYLES
+    %% ─────────────────────────────────────────────────────────────────────────
+    classDef internet     fill:#0f172a,stroke:#475569,color:#94a3b8,stroke-dasharray:6 3
+    classDef edgelayer    fill:#1e293b,stroke:#475569,color:#e2e8f0
+    classDef appsvc      fill:#14532d,stroke:#16a34a,color:#bbf7d0
+    classDef worker       fill:#172554,stroke:#1d4ed8,color:#bfdbfe
+    classDef datastore    fill:#3b0764,stroke:#9333ea,color:#e9d5ff
+    classDef volume       fill:#1e1b4b,stroke:#6366f1,color:#c7d2fe,stroke-dasharray:4 2
+    classDef observ       fill:#1c1917,stroke:#78716c,color:#d6d3d1
+    classDef ctrlplane    fill:#1a1a2e,stroke:#6366f1,color:#c7d2fe
+
+    class Internet internet
+    class C_Edge edgelayer
+    class C_Web,C_API,C_WS appsvc
+    class C_DBW,C_BlobW,C_ThumbW worker
+    class C_PG,C_Redis,C_Minio datastore
+    class Vol_PG,Vol_Minio volume
+    class C_OTEL observ
+    class C_Prom,C_Loki,C_Tempo,C_Grafana ctrlplane

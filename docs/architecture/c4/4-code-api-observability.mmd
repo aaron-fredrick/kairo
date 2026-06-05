@@ -1,0 +1,75 @@
+%%{init: {
+  "theme": "dark",
+  "flowchart": {
+    "nodeSpacing": 45,
+    "rankSpacing": 55
+  }
+}}%%
+
+classDiagram
+    namespace app_observability {
+        class observability_init {
+            +setup(app) None
+        }
+        class logging {
+            +setup_logging() None
+        }
+        class tracing {
+            +setup_tracing() None
+        }
+        class metrics {
+            +setup_metrics() None
+        }
+        class otel_config {
+            +ResourceAttributes
+        }
+    }
+
+    namespace app_observability_middleware {
+        class RequestIDMiddleware {
+            +dispatch(request, call_next)
+        }
+        class MetricsMiddleware {
+            +dispatch(request, call_next)
+        }
+    }
+
+    namespace app_core {
+        class Config {
+            +str DATABASE_URL
+            +str REDIS_URL
+            +str STORAGE_BACKEND
+            +list cors_origins_list
+            +validate_production()
+        }
+        class Security {
+            +verify_password(plain, hashed) bool
+            +get_password_hash(password) str
+            +create_access_token(subject, delta) str
+        }
+    }
+
+    namespace app {
+        class AppContainer {
+            +Redis redis
+            +CacheManager cache_manager
+            +EventManager event_manager
+            +close() None
+        }
+        class main {
+            +lifespan(app)
+            +exception_handler(Exception)
+        }
+    }
+
+    main ..> observability_init : calls setup()
+    main ..> AppContainer : initializes
+    main ..> RequestIDMiddleware : registers
+    main ..> MetricsMiddleware : registers
+
+    observability_init ..> logging : calls
+    observability_init ..> tracing : calls
+    observability_init ..> metrics : calls
+
+    AppContainer ..> Config : reads
+    Security ..> Config : reads

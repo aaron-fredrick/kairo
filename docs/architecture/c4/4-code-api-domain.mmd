@@ -1,0 +1,51 @@
+%%{init: {
+  "theme": "dark",
+  "flowchart": {
+    "nodeSpacing": 45,
+    "rankSpacing": 55
+  }
+}}%%
+
+classDiagram
+    namespace app_domain_models {
+        class MessageDomain {
+            +int id
+            +str content
+            +int sender_id
+            +int room_id
+            +datetime created_at
+            +datetime updated_at
+            +list[AttachmentDomain] attachments
+        }
+        
+        class AttachmentDomain {
+            +int id
+            +int message_id
+            +int upload_id
+            +str filename
+            +datetime created_at
+            +datetime updated_at
+        }
+        
+        class RoomDomain {
+            +int id
+            +str name
+            +datetime created_at
+        }
+        
+        class UserDomain {
+            +int id
+            +str username
+            +str role
+            +datetime created_at
+        }
+    }
+
+    namespace app_domain_policies {
+        class MessagePolicy {
+            +can_delete(user_id, message) bool
+        }
+    }
+
+    MessageDomain "1" *-- "many" AttachmentDomain : contains
+    MessagePolicy ..> MessageDomain : validates ownership

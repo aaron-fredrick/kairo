@@ -1,0 +1,121 @@
+%%{init: {
+  "theme": "dark",
+  "flowchart": {
+    "nodeSpacing": 45,
+    "rankSpacing": 55
+  }
+}}%%
+
+classDiagram
+    namespace app_infrastructure_db_orm {
+        class BaseORM {
+            +DateTime created_at
+            +DateTime updated_at
+        }
+        class UserORM {
+            +int id
+            +str username
+            +str hashed_password
+            +UserRole role
+            +bool is_superadmin
+        }
+        class RoomORM {
+            +int id
+            +str name
+            +int created_by_id
+        }
+        class MessageORM {
+            +int id
+            +str content
+            +int sender_id
+            +int room_id
+        }
+        class AttachmentORM {
+            +int id
+            +int message_id
+            +int upload_id
+            +str filename
+        }
+        class UploadORM {
+            +int id
+            +str filename
+            +str s3_key
+            +str content_type
+            +int size_bytes
+        }
+        class DirectMessageORM {
+            +int id
+            +int sender_id
+            +int receiver_id
+            +str content
+        }
+    }
+
+    namespace app_infrastructure_repositories {
+        class BaseRepository~ORM, DTO~ {
+            <<abstract>>
+            +get_by_id(id) DTO
+            +get_all() list[DTO]
+            +create(data) DTO
+            +update(id, data) DTO
+            +delete(id) bool
+            #_to_dto()* DTO
+        }
+        class MessageRepository {
+            +get_with_attachments(id) MessageDTO
+            #_to_dto() MessageDTO
+        }
+        class AttachmentRepository {
+            +get_by_message_id(id) list[AttachmentDTO]
+            #_to_dto() AttachmentDTO
+        }
+        class RoomRepository {
+            #_to_dto() RoomDTO
+        }
+        class UserRepository {
+            +get_by_username(username) UserDTO
+            #_to_dto() UserDTO
+        }
+    }
+
+    namespace app_infrastructure_dtos {
+        class MessageDTO
+        class AttachmentDTO
+        class RoomDTO
+        class UserDTO
+    }
+
+    namespace app_infrastructure_clients {
+        class CacheManager {
+            +get(key) str
+            +set(key, value, ttl) None
+            +delete(key) None
+            +keys(pattern) list[str]
+        }
+        class StorageClient {
+            +get_boto_client() boto3_client
+            +check_storage_connection() None
+            +generate_presigned_url(key, expiry) str
+        }
+    }
+
+    UserORM --|> BaseORM
+    RoomORM --|> BaseORM
+    MessageORM --|> BaseORM
+    AttachmentORM --|> BaseORM
+    UploadORM --|> BaseORM
+    DirectMessageORM --|> BaseORM
+
+    MessageRepository --|> BaseRepository
+    AttachmentRepository --|> BaseRepository
+    RoomRepository --|> BaseRepository
+    UserRepository --|> BaseRepository
+
+    MessageRepository ..> MessageORM : maps
+    MessageRepository ..> MessageDTO : returns
+    AttachmentRepository ..> AttachmentORM : maps
+    AttachmentRepository ..> AttachmentDTO : returns
+    RoomRepository ..> RoomORM : maps
+    RoomRepository ..> RoomDTO : returns
+    UserRepository ..> UserORM : maps
+    UserRepository ..> UserDTO : returns
