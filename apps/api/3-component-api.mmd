@@ -1,0 +1,94 @@
+flowchart TB
+    %% ── External Actors ──────────────────────────────────────────────────
+    ClientApp["Client Application\n[Web / Mobile]"]
+    LB["Load Balancer / Reverse Proxy\n[nginx / Caddy]"]
+
+    %% ── Kairo API System Boundary ────────────────────────────────────────
+    subgraph KairoAPI["Kairo API  [FastAPI Application]"]
+        direction TB
+
+        subgraph API["API Layer"]
+            direction LR
+            Routers["Routers\n[FastAPI APIRouter]\nauth, messages, rooms,\npresence, attachments"]
+            Deps["Dependency Injection\n[FastAPI Depends]\nauth, db, repos, services"]
+            Schemas["Request/Response Schemas\n[Pydantic]\n*Schema classes"]
+            Health["Health Endpoint\n[GET /health]"]
+        end
+
+        subgraph App["Application Layer"]
+            direction LR
+            MsgSvc["MessageService\n[Python class]\nOrchestrates message CRUD\nand policy enforcement"]
+            AttSvc["AttachmentService\n[Python class]\nOrchestrates attachment retrieval"]
+            PresSvc["PresenceService\n[Python class]\nHeartbeat and online-user tracking"]
+        end
+
+        subgraph Domain["Domain Layer"]
+            direction LR
+            Models["Domain Models\n[Python dataclasses]\nMessageDomain, UserDomain,\nRoomDomain, AttachmentDomain"]
+            Policies["Domain Policies\n[Pure Python]\nMessagePolicy"]
+        end
+
+        subgraph Infra["Infrastructure Layer"]
+            direction LR
+            Repos["Repositories\n[SQLAlchemy async]\nMessage, Attachment,\nRoom, User"]
+            ORM["ORM Models\n[SQLAlchemy mapped]\nMessageORM, UserORM,\nRoomORM, AttachmentORM,\nUploadORM, DirectMessageORM"]
+            DTOs["DTOs\n[Python dataclasses]\nMessageDTO, AttachmentDTO,\nRoomDTO, UserDTO"]
+            CacheInfra["Cache Manager\n[Redis]\nPresence and session cache"]
+            StorageInfra["Storage Client\n[S3 / MinIO]\nFile upload and presigned URLs"]
+        end
+
+        Observability["Observability\n[structlog + OpenTelemetry]\nRequest tracing, metrics,\nstructured JSON logging"]
+        Container["AppContainer\n[Composition Root]\nWires Redis, Cache, Events\nat application startup"]
+    end
+
+    %% ── External Systems ─────────────────────────────────────────────────
+    PostgreSQL[("PostgreSQL\n[Relational DB]")]
+    Redis[("Redis\n[Cache / Pub-Sub]")]
+    S3[("S3 / MinIO\n[Object Storage]")]
+
+    %% ── Flows ────────────────────────────────────────────────────────────
+    ClientApp -->|"HTTPS"| LB
+    LB -->|"HTTP/1.1 or HTTP/2"| Routers
+    LB -->|"HTTP GET /health"| Health
+
+    Routers -->|"Resolves via"| Deps
+    Routers -->|"Validates with"| Schemas
+    Deps -->|"Injects"| MsgSvc
+    Deps -->|"Injects"| AttSvc
+    Deps -->|"Injects"| PresSvc
+
+    MsgSvc -->|"Applies"| Policies
+    MsgSvc -->|"Returns"| Models
+    AttSvc -->|"Returns"| Models
+    PresSvc -->|"Reads/Writes"| CacheInfra
+
+    MsgSvc -->|"Calls"| Repos
+    AttSvc -->|"Calls"| Repos
+
+    Repos -->|"Maps ORM → DTO"| DTOs
+    Repos -->|"Queries"| ORM
+    ORM -->|"asyncpg driver"| PostgreSQL
+
+    CacheInfra -->|"aioredis"| Redis
+    StorageInfra -->|"boto3"| S3
+
+    Container -->|"Initialises"| CacheInfra
+    Container -->|"Initialises"| StorageInfra
+
+    Routers -.->|"Emits spans/logs"| Observability
+
+    %% ── Styles ───────────────────────────────────────────────────────────
+    classDef layer       fill:#1e293b,stroke:#334155,color:#f1f5f9
+    classDef external    fill:#0f172a,stroke:#475569,color:#94a3b8,stroke-dasharray:6 3
+    classDef infrasys    fill:#172554,stroke:#1d4ed8,color:#bfdbfe
+    classDef apilayer    fill:#14532d,stroke:#16a34a,color:#bbf7d0
+    classDef applayer    fill:#1e1b4b,stroke:#7c3aed,color:#ddd6fe
+    classDef domlayer    fill:#451a03,stroke:#c2410c,color:#fed7aa
+    classDef cross       fill:#1c1917,stroke:#78716c,color:#d6d3d1
+
+    class API,Routers,Deps,Schemas,Health apilayer
+    class App,MsgSvc,AttSvc,PresSvc applayer
+    class Domain,Models,Policies domlayer
+    class Infra,Repos,ORM,DTOs,CacheInfra,StorageInfra infrasys
+    class Observability,Container cross
+    class ClientApp,LB,PostgreSQL,Redis,S3 external

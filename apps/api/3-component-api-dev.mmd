@@ -1,0 +1,92 @@
+flowchart TB
+    %% ── C4 Level 3 – Development variant ─────────────────────────────────
+    %% Differences from production:
+    %%   - SQLite replaces PostgreSQL
+    %%   - Redis is optional (cache falls back to no-op)
+    %%   - Storage is local filesystem under data/
+    %%   - No load balancer; Uvicorn served directly with --reload
+
+    ClientApp["Browser / API Client\n[localhost:5173 or curl]"]
+    Uvicorn["Uvicorn Dev Server\nuv run uvicorn app.main:app --reload\n[127.0.0.1:8000]"]
+
+    subgraph KairoAPI["Kairo API  [FastAPI Application] – dev"]
+        direction TB
+
+        subgraph API["API Layer"]
+            direction LR
+            Routers["Routers\nauth, messages, rooms,\npresence, attachments"]
+            Deps["Dependency Injection\nauth, db, repos, services"]
+            Schemas["Request/Response Schemas\n*Schema classes"]
+            Health["GET /health"]
+        end
+
+        subgraph App["Application Layer"]
+            direction LR
+            MsgSvc["MessageService"]
+            AttSvc["AttachmentService"]
+            PresSvc["PresenceService"]
+        end
+
+        subgraph Domain["Domain Layer"]
+            direction LR
+            Models["Domain Models\nMessageDomain, UserDomain,\nRoomDomain, AttachmentDomain"]
+            Policies["Policies\nMessagePolicy"]
+        end
+
+        subgraph Infra["Infrastructure Layer"]
+            direction LR
+            Repos["Repositories\nMessage, Attachment, Room, User"]
+            ORM["ORM Models\nSQLAlchemy mapped classes"]
+            DTOs["DTOs\nRepository output boundary"]
+            CacheInfra["Cache Manager\n[optional – Redis or no-op]"]
+            StorageInfra["Local Storage Client\n[data/blobs/ on disk]"]
+        end
+
+        Observability["Observability\nstructlog console output\n(no OTLP exporter in dev)"]
+        Container["AppContainer\nComposition Root"]
+    end
+
+    %% ── Dev-specific external systems ─────────────────────────────────────
+    SQLite[("SQLite\nkairo.db\n[aiosqlite – file on disk]")]
+    Redis_dev[("Redis\n[optional, can be absent]")]
+    LocalFS[("Local Filesystem\ndata/blobs/\ndata/temp/")]
+
+    %% ── Flows ─────────────────────────────────────────────────────────────
+    ClientApp -->|"HTTP (no TLS)"| Uvicorn
+    Uvicorn --> Routers
+    Uvicorn -->|"GET /health"| Health
+
+    Routers -->|"Resolves via"| Deps
+    Routers -->|"Validates with"| Schemas
+    Deps -->|"Injects"| MsgSvc & AttSvc & PresSvc
+
+    MsgSvc -->|"Applies"| Policies
+    MsgSvc -->|"Returns"| Models
+    AttSvc -->|"Returns"| Models
+    PresSvc -->|"Reads/Writes"| CacheInfra
+
+    MsgSvc & AttSvc -->|"Calls"| Repos
+    Repos -->|"Maps ORM → DTO"| DTOs
+    Repos -->|"Queries"| ORM
+    ORM -->|"aiosqlite"| SQLite
+
+    CacheInfra -.->|"optional aioredis"| Redis_dev
+    StorageInfra -->|"os.makedirs / file I/O"| LocalFS
+
+    Container -->|"Initialises"| CacheInfra & StorageInfra
+    Routers -.->|"Console logs"| Observability
+
+    %% ── Styles ───────────────────────────────────────────────────────────
+    classDef apilayer  fill:#14532d,stroke:#16a34a,color:#bbf7d0
+    classDef applayer  fill:#1e1b4b,stroke:#7c3aed,color:#ddd6fe
+    classDef domlayer  fill:#451a03,stroke:#c2410c,color:#fed7aa
+    classDef infralayer fill:#172554,stroke:#1d4ed8,color:#bfdbfe
+    classDef external  fill:#0f172a,stroke:#475569,color:#94a3b8,stroke-dasharray:6 3
+    classDef cross     fill:#1c1917,stroke:#78716c,color:#d6d3d1
+
+    class API,Routers,Deps,Schemas,Health apilayer
+    class App,MsgSvc,AttSvc,PresSvc applayer
+    class Domain,Models,Policies domlayer
+    class Infra,Repos,ORM,DTOs,CacheInfra,StorageInfra infralayer
+    class Observability,Container cross
+    class ClientApp,Uvicorn,SQLite,Redis_dev,LocalFS external

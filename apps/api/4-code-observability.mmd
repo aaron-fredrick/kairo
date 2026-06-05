@@ -1,0 +1,65 @@
+flowchart TB
+    %% ── C4 Level 4: Code – Observability + Container (Cross-cutting) ─────
+    %% Files: app/observability/*, app/container.py, app/core/*
+
+    subgraph CrossCutting["Cross-cutting Concerns"]
+        direction TB
+
+        subgraph Obs["app/observability/"]
+            ObsInit["__init__.py\nsetup(app) → None\nCalls: setup_logging()\n       setup_tracing()\n       setup_metrics()"]
+
+            Logging["logging.py\nsetup_logging()\nConfigures structlog:\n  - JSON renderer\n  - ISO timestamps\n  - Log level filter\n  - OpenTelemetry log handler"]
+
+            Tracing["tracing.py\nsetup_tracing()\nOpenTelemetry TracerProvider\nOTLP gRPC exporter"]
+
+            Metrics["metrics.py\nsetup_metrics()\nOpenTelemetry MeterProvider\nPrometheus / OTLP exporter"]
+
+            OTel["otel.py\nOTLP exporter configuration\nResource attributes:\n  service.name = kairo-api\n  deployment.environment"]
+
+            subgraph Middleware["app/observability/middleware/"]
+                ReqIDMw["request_id_middleware.py\nrequest_id_middleware()\nGenerates X-Request-ID if absent\nBinds to structlog contextvars\nPropagates header in response"]
+                MetricsMw["metrics_middleware.py\nmetrics_middleware()\nRecords HTTP request duration\nand status code counters"]
+            end
+        end
+
+        subgraph CoreLayer["app/core/"]
+            Config["config.py\nSettings (pydantic-settings)\n─────────────────────────────\nENV, DEBUG\nDATABASE_URL property\n  sqlite (dev) | asyncpg (prod)\nREDIS_URL\nSTORAGE_BACKEND, S3_*\nJWT_SECRET, JWT_ALGORITHM\nADJECTIVES_FILE, NOUNS_FILE\ncors_origins_list property\nvalidate_production()"]
+
+            Security["security.py\nverify_password(plain, hashed) → bool\nget_password_hash(password) → str\ncreate_access_token(subject, delta) → str\n─────────────────────────────\nPasslib bcrypt + python-jose"]
+        end
+
+        Container["app/container.py\nAppContainer\n─────────────────────────────\nredis: Redis client\ncache_manager: CacheManager\nevent_manager: EventManager\n─────────────────────────────\nclose() → None\nCalled by lifespan on shutdown"]
+
+        Main["app/main.py\nFastAPI application factory\n─────────────────────────────\nlifespan():\n  check_db_connection()\n  check_storage_connection()\n  AppContainer() → app.state.container\nMiddleware chain:\n  request_id → metrics → CORS\nexception_handler(Exception)"]
+    end
+
+    %% ── External Observability Backend ───────────────────────────────────
+    OTEL[("OpenTelemetry Collector\n[OTLP gRPC / HTTP]")]
+    Prometheus[("Prometheus / Grafana\n[Metrics scrape]")]
+
+    %% ── Flows ─────────────────────────────────────────────────────────────
+    Main -->|"Calls at startup"| ObsInit
+    Main -->|"Initialises"| Container
+    Main -->|"Registers"| ReqIDMw & MetricsMw
+
+    ObsInit --> Logging & Tracing & Metrics
+    Tracing --> OTel
+    Metrics --> OTel
+    OTel -->|"OTLP"| OTEL
+    Metrics -.->|"Scrape"| Prometheus
+
+    Container -->|"Reads"| Config
+    Security -->|"Reads"| Config
+
+    %% ── Styles ───────────────────────────────────────────────────────────
+    classDef obs     fill:#1e293b,stroke:#475569,color:#cbd5e1
+    classDef mw      fill:#172554,stroke:#1d4ed8,color:#bfdbfe
+    classDef core    fill:#1c1917,stroke:#78716c,color:#d6d3d1
+    classDef cont    fill:#14532d,stroke:#16a34a,color:#bbf7d0
+    classDef ext     fill:#0f172a,stroke:#475569,color:#94a3b8,stroke-dasharray:6 3
+
+    class ObsInit,Logging,Tracing,Metrics,OTel obs
+    class ReqIDMw,MetricsMw mw
+    class Config,Security core
+    class Container,Main cont
+    class OTEL,Prometheus ext

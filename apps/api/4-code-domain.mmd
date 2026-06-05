@@ -1,0 +1,37 @@
+flowchart TB
+    %% ── C4 Level 4: Code – Domain Layer ──────────────────────────────────
+    %% Files: app/domain/models/*, app/domain/policies/*
+
+    subgraph DomainLayer["Domain Layer  [app/domain/]"]
+        direction TB
+
+        subgraph Models["app/domain/models/"]
+            MsgDomain["message_domain.py\nMessageDomain\n─────────────────────\nid: int\ncontent: str\nsender_id: int\nroom_id: int\ncreated_at: datetime\nupdated_at: datetime\nattachments: list[AttachmentDomain]"]
+
+            AttDomain["attachment_domain.py\nAttachmentDomain\n─────────────────────\nid: int\nmessage_id: int\nupload_id: int\nfilename: str\ncreated_at: datetime\nupdated_at: datetime"]
+
+            RoomDomain["room_domain.py\nRoomDomain\n─────────────────────\nid: int\nname: str\ncreated_at: datetime"]
+
+            UserDomain["user_domain.py\nUserDomain\n─────────────────────\nid: int\nusername: str\nrole: str\ncreated_at: datetime"]
+        end
+
+        subgraph Policies["app/domain/policies/"]
+            MsgPolicy["message_policy.py\nMessagePolicy\n─────────────────────\ncan_delete(user_id, message) → bool\n\nRule: sender_id must match user_id\nNo framework imports — pure Python"]
+        end
+    end
+
+    %% ── Relationships ─────────────────────────────────────────────────────
+    MsgDomain -->|"contains list of"| AttDomain
+    MsgPolicy -->|"validates ownership of"| MsgDomain
+
+    %% ── No infrastructure or framework dependencies ────────────────────────
+    note["Zero external dependencies.\nAll types are stdlib Python.\nNo SQLAlchemy, FastAPI, or Pydantic imports."]
+
+    %% ── Styles ───────────────────────────────────────────────────────────
+    classDef model   fill:#451a03,stroke:#c2410c,color:#fed7aa
+    classDef policy  fill:#3b0764,stroke:#9333ea,color:#e9d5ff
+    classDef note    fill:#0f172a,stroke:#334155,color:#64748b
+
+    class MsgDomain,AttDomain,RoomDomain,UserDomain model
+    class MsgPolicy policy
+    class note note

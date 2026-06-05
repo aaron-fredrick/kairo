@@ -1,0 +1,61 @@
+flowchart TB
+    %% ── C4 Level 4: Code – API Layer ─────────────────────────────────────
+    %% Files: app/api/router.py, app/api/routers/*, app/api/dependencies/*,
+    %%        app/api/exceptions.py, app/schemas/*
+
+    subgraph APILayer["API Layer  [app/api/]"]
+        direction TB
+
+        Router["router.py\napi_router = APIRouter(prefix='/api')\nMounts all sub-routers"]
+
+        subgraph Routers["app/api/routers/"]
+            AuthRouter["auth_router.py\nPOST /auth/login\nPOST /auth/register\nGET  /auth/me\nPOST /auth/join"]
+            MsgRouter["messages_router.py\nGET  /messages/{id}"]
+            RoomRouter["rooms_router.py\nGET    /rooms\nPOST   /rooms\nGET    /rooms/{id}\nGET    /rooms/{id}/join\nGET    /rooms/{id}/leave\nPOST   /rooms/{id}/add_user\nGET    /rooms/{id}/messages"]
+            AttRouter["attachments_router.py\nPOST /attachments/upload/{msg_id}\nGET  /attachments/download/{id}\nGET  /attachments/{id}/thumbnail/{size}\nGET  /attachments/{id}"]
+            PresRouter["presence_router.py\nPOST /presence/heartbeat\nGET  /presence/online"]
+        end
+
+        subgraph Deps["app/api/dependencies/"]
+            AuthDep["auth.py\nget_current_user_id()\nDecodes JWT Bearer token"]
+            DBDep["db.py\nget_db_session()\nYields AsyncSession per request"]
+            RepoDep["repositories.py\nget_message_repo()\nget_attachment_repo()\nget_room_repo()\nget_user_repo()"]
+            SvcDep["services.py\nget_message_service()\nget_attachment_service()\nget_presence_service()"]
+            ContDep["container.py\nget_container()\nReads app.state.container"]
+        end
+
+        subgraph Schemas["app/schemas/"]
+            MsgSchema["message_schema.py\nMessageCreateSchema\nMessageResponseSchema\nMessageWithAttachmentsResponseSchema"]
+            AttSchema["attachment_schema.py\nAttachmentResponseSchema\nUploadResponseSchema\nDownloadUrlResponseSchema\nThumbnailResponseSchema\nThumbnailSize"]
+            AuthSchema["auth_schema.py\nTokenSchema\nUserRegisterSchema\nUserLoginSchema\nUserResponseSchema"]
+            RoomSchema["room_schema.py\nRoomCreateSchema\nRoomResponseSchema"]
+            PresSchema["presence_schema.py\nPresenceUpdateResponseSchema\nOnlineUsersResponseSchema"]
+            CommonSchema["common_schema.py\nShared base schema types"]
+        end
+
+        Exceptions["exceptions.py\nRegister HTTP exception handlers:\n404 Not Found\n422 Unprocessable Entity\n500 Internal Server Error"]
+        Health["app/health.py\nGET /health\nHealthCheckResponse\n{status, version, services}"]
+    end
+
+    %% ── Dependency chain ─────────────────────────────────────────────────
+    Router --> AuthRouter & MsgRouter & RoomRouter & AttRouter & PresRouter
+
+    AuthRouter --> AuthDep & AuthSchema
+    MsgRouter  --> AuthDep & SvcDep & MsgSchema
+    RoomRouter --> AuthDep & SvcDep & RoomSchema
+    AttRouter  --> AuthDep & AttSchema
+    PresRouter --> AuthDep & SvcDep & PresSchema
+
+    RepoDep --> DBDep
+    SvcDep  --> RepoDep & ContDep
+
+    %% ── Styles ───────────────────────────────────────────────────────────
+    classDef router  fill:#14532d,stroke:#16a34a,color:#bbf7d0
+    classDef dep     fill:#1e1b4b,stroke:#7c3aed,color:#ddd6fe
+    classDef schema  fill:#1c3a4a,stroke:#0ea5e9,color:#bae6fd
+    classDef cross   fill:#1c1917,stroke:#78716c,color:#d6d3d1
+
+    class Router,AuthRouter,MsgRouter,RoomRouter,AttRouter,PresRouter router
+    class AuthDep,DBDep,RepoDep,SvcDep,ContDep dep
+    class MsgSchema,AttSchema,AuthSchema,RoomSchema,PresSchema,CommonSchema schema
+    class Exceptions,Health cross
