@@ -59,7 +59,8 @@ def setup_logging():
     console_renderer = structlog.dev.ConsoleRenderer(
         colors=True, 
         exception_formatter=structlog.dev.plain_traceback,
-        level_styles=padded_level_styles
+        level_styles=padded_level_styles,
+        pad_level=False
     )
 
     def console_formatter_processor(logger, method_name, event_dict):
