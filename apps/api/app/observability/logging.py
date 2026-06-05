@@ -7,31 +7,60 @@ from app.core.config import settings
 def setup_logging():
     log_level = getattr(logging, settings.LOG_LEVEL.upper(), logging.DEBUG)
     
-    # Configure standard logging
-    handlers = [logging.StreamHandler(sys.stdout)]
-    if settings.OTEL_ENABLED:
-        handlers.append(LoggingHandler())
-
-    logging.basicConfig(
-        format="%(message)s",
-        level=log_level,
-        handlers=handlers
-    )
+    # Shared processors (extract context, timestamp, log level, etc.)
+    shared_processors = [
+        structlog.stdlib.filter_by_level,
+        structlog.contextvars.merge_contextvars,
+        structlog.stdlib.add_logger_name,
+        structlog.stdlib.add_log_level,
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.stdlib.PositionalArgumentsFormatter(),
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
+    ]
     
+    # Configure structlog to prepare the event dict for logging formatters
     structlog.configure(
-        processors=[
-            structlog.stdlib.filter_by_level,
-            structlog.contextvars.merge_contextvars,
-            structlog.processors.TimeStamper(fmt="iso"),
-            structlog.stdlib.add_logger_name,
-            structlog.stdlib.add_log_level,
-            structlog.stdlib.PositionalArgumentsFormatter(),
-            structlog.processors.StackInfoRenderer(),
-            structlog.processors.format_exc_info,
-            structlog.processors.JSONRenderer()
+        processors=shared_processors + [
+            structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
         ],
         context_class=dict,
         logger_factory=structlog.stdlib.LoggerFactory(),
         wrapper_class=structlog.stdlib.BoundLogger,
         cache_logger_on_first_use=True,
     )
+
+    # 1. Terminal Console Formatter
+    console_formatter = structlog.stdlib.ProcessorFormatter(
+        processors=[
+            structlog.dev.ConsoleRenderer(colors=True, exception_formatter=structlog.dev.plain_traceback)
+        ]
+    )
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(console_formatter)
+    
+    handlers = [console_handler]
+
+    # 2. OTel JSON Formatter
+    if settings.OTEL_ENABLED:
+        json_formatter = structlog.stdlib.ProcessorFormatter(
+            processors=[
+                structlog.processors.JSONRenderer()
+            ]
+        )
+        otel_handler = LoggingHandler()
+        otel_handler.setFormatter(json_formatter)
+        handlers.append(otel_handler)
+
+    # Clear root handlers and apply ours
+    root_logger = logging.getLogger()
+    root_logger.handlers.clear()
+    root_logger.setLevel(log_level)
+    for handler in handlers:
+        root_logger.addHandler(handler)
+
+    # Hijack Uvicorn loggers to use our structlog handlers
+    for logger_name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+        ulogger = logging.getLogger(logger_name)
+        ulogger.handlers.clear()
+        ulogger.propagate = True
