@@ -53,7 +53,8 @@ class AuthService:
                  
             # Username is unique! Reserve it in cache
             logger.debug("Unique username found and reserved", username=username)
-            await self.cache_manager.set(cache_key, "1", ttl=86400) 
+            ttl = settings.REFRESH_TOKEN_EXPIRE_MINUTES * 60
+            await self.cache_manager.set(cache_key, "1", ttl=ttl) 
             return username
             
         logger.error("Failed to generate a unique username", max_attempts=max_attempts)
@@ -79,7 +80,7 @@ class AuthService:
         )
         
         # TTL matches refresh token expiry exactly, so anonymous user exists as long as they can refresh
-        ttl = settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
+        ttl = settings.REFRESH_TOKEN_EXPIRE_MINUTES * 60
         user_data = {
             "id": user_domain.id,
             "username": user_domain.username,
@@ -125,8 +126,15 @@ class AuthService:
                     raise ValueError("Session expired")
                     
                 # Extend cache TTL
-                ttl = settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
+                ttl = settings.REFRESH_TOKEN_EXPIRE_MINUTES * 60
                 await self.cache_manager.set(f"anon_user:{user_id}", user_data_str, ttl=ttl)
+                
+                # Also extend the username_taken TTL so nobody else can take it
+                user_data = json.loads(user_data_str)
+                username = user_data.get("username")
+                if username:
+                    await self.cache_manager.set(f"username_taken:{username}", "1", ttl=ttl)
+                    
                 logger.debug("Extended anonymous user cache TTL", user_id=user_id)
             else:
                 # Registered user, check DB
