@@ -20,3 +20,15 @@ async def get_current_user_id(token: str = Depends(oauth2_scheme)) -> int:
         return int(user_id)
     except JWTError:
         raise credentials_exception
+
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
+
+async def get_current_user_id_optional(token: str | None = Depends(oauth2_scheme_optional)) -> int | None:
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+        user_id = payload.get("sub")
+        return int(user_id) if user_id else None
+    except JWTError:
+        return None
