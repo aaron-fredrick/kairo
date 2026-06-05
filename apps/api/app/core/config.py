@@ -35,14 +35,10 @@ class Settings(BaseSettings):
         if self.ENV == "production" or os.getenv("DB_BACKEND", "postgres") == "postgres":
             return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
         return os.getenv("SQLITE_URL", "sqlite+aiosqlite:///./data/db/kairo.db")
-
-    # Redis
-    REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
-    REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
     
-    @property
-    def REDIS_URL(self) -> str:
-        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/0"
+    # Redis
+    REDIS_URL: str | None = os.getenv("REDIS_HOST", None)
+    
 
     # Storage
     STORAGE_BACKEND: str = os.getenv("STORAGE_BACKEND", "local") # s3, minio, local

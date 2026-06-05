@@ -1,9 +1,5 @@
 from fastapi import APIRouter
-from app.api.routes.presence import router as presence_router
-from app.api.routes.attachments import router as attachments_router
-from app.api.routes.messages import router as messages_router
-from app.api.routes.rooms import router as rooms_router
-from app.api.routes.auth import router as auth_router
+from .routers import *
 
 # Master API Router
 api_router = APIRouter(prefix="/api")
