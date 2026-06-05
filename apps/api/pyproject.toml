@@ -31,6 +31,7 @@ dependencies = [
     "alembic>=1.13.1",
     "opentelemetry-exporter-otlp>=1.42.1",
     "opentelemetry-instrumentation-asgi>=0.63b1",
+    "aiosqlite>=0.22.1",
 ]
 
 [build-system]
