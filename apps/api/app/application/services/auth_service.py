@@ -62,27 +62,42 @@ class AuthService:
         logger.debug("Initiating anonymous join flow")
         username = await self._generate_unique_username()
         
-        # Create user
-        logger.debug("Creating anonymous user in database", username=username)
-        user_dto = await self.user_repo.create({
-            "username": username,
-            "is_anonymous": True,
-            "role": "normal"
-        })
-        logger.debug("Anonymous user created successfully", user_id=user_dto.id)
+        import json
+        
+        # Create user purely in memory/cache with a negative ID to avoid DB collisions
+        user_id = -random.randint(1_000_000, 9_999_999)
+        logger.debug("Creating anonymous user in cache", username=username, user_id=user_id)
         
         user_domain = UserDomain(
-            id=user_dto.id,
-            username=user_dto.username,
-            pfp_hash=user_dto.pfp_hash,
-            is_anonymous=user_dto.is_anonymous,
-            is_superadmin=user_dto.is_superadmin,
-            role=user_dto.role
+            id=user_id,
+            username=username,
+            pfp_hash=None,
+            is_anonymous=True,
+            is_superadmin=False,
+            role="normal"
         )
         
-        # Create token
-        logger.debug("Generating access token for anonymous user", user_id=user_dto.id)
-        token = create_access_token(subject=str(user_dto.id))
+        # TTL matches JWT token expiry exactly
+        ttl = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+        user_data = {
+            "id": user_domain.id,
+            "username": user_domain.username,
+            "pfp_hash": user_domain.pfp_hash,
+            "is_anonymous": user_domain.is_anonymous,
+            "is_superadmin": user_domain.is_superadmin,
+            "role": user_domain.role
+        }
+        await self.cache_manager.set(
+            f"anon_user:{user_id}",
+            json.dumps(user_data),
+            ttl=ttl
+        )
         
-        logger.debug("Anonymous join flow completed successfully", user_id=user_dto.id)
+        logger.debug("Anonymous user created in cache successfully", user_id=user_id, ttl=ttl)
+        
+        # Create token
+        logger.debug("Generating access token for anonymous user", user_id=user_id)
+        token = create_access_token(subject=str(user_id))
+        
+        logger.debug("Anonymous join flow completed successfully", user_id=user_id)
         return user_domain, token
