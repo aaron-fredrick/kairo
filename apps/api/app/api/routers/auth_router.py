@@ -4,17 +4,17 @@ import structlog
 from app.api.dependencies.auth import get_current_user_id
 from app.api.dependencies.services import get_auth_service
 from app.application.services.auth_service import AuthService
-from app.schemas.auth_schema import TokenSchema, UserResponseSchema, UserJoinResponseSchema, RefreshTokenRequestSchema
+from app.schemas.auth_schema import TokenSchema, UserResponseSchema, UserRegisterResponseSchema, RefreshTokenRequestSchema
 
 logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
-@router.get("/register", response_model=UserJoinResponseSchema, status_code=status.HTTP_201_CREATED)
+@router.get("/register", response_model=UserRegisterResponseSchema, status_code=status.HTTP_201_CREATED)
 async def register(service: AuthService = Depends(get_auth_service)):
     """Create a new temporary user session with an auto-generated username."""
     user_domain, access_token, refresh_token = await service.anonymous_join()
-    return UserJoinResponseSchema(
+    return UserRegisterResponseSchema(
         user=UserResponseSchema(
             id=user_domain.id,
             username=user_domain.username,

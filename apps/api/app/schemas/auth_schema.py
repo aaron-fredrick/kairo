@@ -19,6 +19,6 @@ class UserResponseSchema(BaseModel):
     class Config:
         from_attributes = True
 
-class UserJoinResponseSchema(BaseModel):
+class UserRegisterResponseSchema(BaseModel):
     user: UserResponseSchema
     token: TokenSchema
