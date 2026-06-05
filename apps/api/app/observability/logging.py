@@ -42,22 +42,31 @@ def setup_logging():
 
     # 1. Terminal Console Formatter
     level_styles = {
-        "critical": "magenta",
-        "exception": "magenta",
-        "error": "red",
-        "warn": "yellow",
-        "warning": "yellow",
-        "info": "green",
-        "debug": "blue",
-        "notset": "default",
+        "CRITICAL": "magenta",
+        "EXCEPTION": "magenta",
+        "ERROR": "red",
+        "WARN": "yellow",
+        "WARNING": "yellow",
+        "INFO": "green",
+        "DEBUG": "blue",
+        "NOTSET": "default",
     }
+    padded_level_styles = {f"{k:^8}": v for k, v in level_styles.items()}
     
+    console_renderer = structlog.dev.ConsoleRenderer(
+        colors=True, 
+        exception_formatter=structlog.dev.plain_traceback,
+        level_styles=padded_level_styles
+    )
+
+    def console_formatter_processor(logger, method_name, event_dict):
+        ed = event_dict.copy()
+        if "level" in ed:
+            ed["level"] = f"{ed['level'].upper():^8}"
+        return console_renderer(logger, method_name, ed)
+
     console_formatter = structlog.stdlib.ProcessorFormatter(
-        processor=structlog.dev.ConsoleRenderer(
-            colors=True, 
-            exception_formatter=structlog.dev.plain_traceback,
-            level_styles=level_styles
-        ),
+        processor=console_formatter_processor,
         foreign_pre_chain=foreign_pre_chain,
     )
     console_handler = logging.StreamHandler(sys.stdout)
@@ -96,3 +105,12 @@ def setup_logging():
         f_logger = logging.getLogger(logger_name)
         f_logger.handlers.clear()
         f_logger.propagate = True
+
+    # Print sample logs if in development mode
+    if settings.ENV in ("development", "dev"):
+        demo_logger = structlog.get_logger("system.logging")
+        demo_logger.debug("Sample debug log")
+        demo_logger.info("Sample info log")
+        demo_logger.warning("Sample warning log")
+        demo_logger.error("Sample error log")
+        demo_logger.critical("Sample critical log")
