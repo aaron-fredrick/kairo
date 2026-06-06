@@ -5,6 +5,59 @@ import structlog
 
 logger = structlog.get_logger(__name__)
 
+from pathlib import Path
+import os
+
+
+class ConfigResolver:
+    def __init__(self, environment: str):
+        self.environment = environment
+
+    def read_secret(self, name: str) -> str | None:
+        path = Path(f"/run/secrets/{name}")
+        if path.exists():
+            value = path.read_text().strip()
+            return value or None
+        return None
+
+    def resolve(
+        self,
+        env_name: str,
+        secret_name: str | None = None,
+        default: str | None = None,
+        required_in_production: bool = True,
+    ) -> str:
+
+        secret_name = secret_name or env_name.lower()
+
+        secret_value = self.read_secret(secret_name)
+        env_value = os.getenv(env_name)
+
+        # 1. Production: secrets ONLY
+        if self.environment == "production":
+            if secret_value:
+                return secret_value
+
+            if required_in_production:
+                raise RuntimeError(
+                    f"Missing required secret: {secret_name}"
+                )
+
+            return env_value or default
+
+        # 2. Non-production: secret → env → default
+        if secret_value:
+            return secret_value
+
+        if env_value:
+            return env_value
+
+        if self.environment == "development":
+            return default or f"DEV_{env_name}_DEFAULT"
+
+        # staging/test fallback
+        return default or env_value or ""
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -17,6 +70,7 @@ class Settings(BaseSettings):
 
     API_PORT: int = int(os.getenv("API_PORT", "8000"))
     API_HOST: str = os.getenv("API_HOST", "0.0.0.0")
+    SERVER_URL: str = os.getenv("SERVER_URL", "http://localhost:8000")
     
     CORS_ORIGINS: str = os.getenv(
         "CORS_ORIGINS",

@@ -52,8 +52,33 @@ async def lifespan(app: FastAPI):
         logger.info("Shutdown complete.")
 
 app = FastAPI(
-    title="Kairo Microservice API",
-    version="0.1.0",
+    title="Kairo API",
+    version="1.0.0-dev",
+    openapi_version="3.1.0",
+    description="Kairo Microservice API",
+    terms_of_service="http://example.com/terms/",
+    contact={
+        "name": "API Support",
+        "url": "http://www.example.com/support",
+        "email": "support@example.com",
+    },
+    license_info={
+        "name": "Apache 2.0",
+        "url": "https://www.apache.org/licenses/LICENSE-2.0.html",
+    },
+    servers=[
+        {
+            "url": settings.SERVER_URL,
+            "description": "Current Environment"
+        }
+    ],
+    openapi_tags=[
+        # TODO: add more tags to supoort for routers
+        {
+            "name": "Auth",
+            "description": "Authentication and authorization endpoints."
+        }
+    ],
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",

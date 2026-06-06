@@ -17,7 +17,11 @@ def get_auth_service(
     user_repo: UserRepository = Depends(get_user_repo),
     container: AppContainer = Depends(get_container)
 ) -> AuthService:
-    return AuthService(user_repo=user_repo, cache_manager=container.cache_manager)
+    return AuthService(
+        user_repo=user_repo,
+        cache_manager=container.cache_manager,
+        event_manager=container.event_manager
+    )
 
 def get_message_policy() -> MessagePolicy:
     return MessagePolicy()

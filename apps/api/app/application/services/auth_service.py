@@ -6,6 +6,7 @@ from typing import Tuple
 from app.core.config import settings
 from app.infrastructure.repositories.user_repository import UserRepository
 from app.infrastructure.cache.cache_manager import CacheManager
+from app.infrastructure.events.protocol import EventProtocol
 from app.domain.models.user_domain import UserDomain
 from app.core.security import create_access_token, create_refresh_token, get_password_hash, verify_password
 from jose import jwt, JWTError
@@ -16,10 +17,12 @@ class AuthService:
     def __init__(
         self,
         user_repo: UserRepository,
-        cache_manager: CacheManager
+        cache_manager: CacheManager,
+        event_manager: EventProtocol
     ):
         self.user_repo = user_repo
         self.cache_manager = cache_manager
+        self.event_manager = event_manager
         self._adjectives = self._load_words(settings.ADJECTIVES_FILE, ["Happy", "Brave", "Clever", "Swift", "Silent"])
         self._nouns = self._load_words(settings.NOUNS_FILE, ["Panda", "Fox", "Tiger", "Eagle", "Wolf"])
 
@@ -120,19 +123,32 @@ class AuthService:
         import json
         logger.debug("Initiating login", username=username)
 
-        username_key = f"user_by_username:{username}"
-        user_id_str = await self.cache_manager.get(username_key)
-        if not user_id_str:
-            logger.warning("Login failed: user not found in cache", username=username)
+        # Use repo for permanent admin users
+        user_dto = await self.user_repo.get_by_username(username)
+        if not user_dto:
+            logger.warning("Login failed: user not found in database", username=username)
             raise ValueError("Invalid credentials")
 
-        user_id = int(user_id_str)
-        user_data = await self._get_user_from_cache(user_id)
-
-        hashed_password = user_data.get("hashed_password")
-        if not hashed_password or not verify_password(password, hashed_password):
+        if not verify_password(password, user_dto.hashed_password):
             logger.warning("Login failed: invalid password", username=username)
             raise ValueError("Invalid credentials")
+
+        user_id = user_dto.id
+        # Convert DTO to dict to match cache format
+        user_data = {
+            "id": user_dto.id,
+            "username": user_dto.username,
+            "hashed_password": user_dto.hashed_password,
+            "pfp_hash": user_dto.pfp_hash,
+            "is_anonymous": user_dto.is_anonymous,
+            "is_superadmin": user_dto.is_superadmin,
+            "role": user_dto.role
+        }
+
+        # Cache the user to allow get_me / get_current_user logic to work unchanged
+        ttl = settings.REFRESH_TOKEN_EXPIRE_MINUTES * 60
+        await self._save_user_to_cache(user_id, user_data, ttl)
+        await self.cache_manager.set(f"user_by_username:{username}", str(user_id), ttl=ttl)
 
         logger.info("User logged in successfully", user_id=user_id, username=username)
         user_domain = self._build_user_domain(user_data)
@@ -188,8 +204,40 @@ class AuthService:
         access_token = create_access_token(subject=str(user_id))
         refresh_token = create_refresh_token(subject=str(user_id))
         
+        # Publish event
+        await self.event_manager.emit("user.registered", user_data)
+        
         logger.debug("Anonymous join flow completed successfully", user_id=user_id)
         return user_domain, access_token, refresh_token
+
+    async def logout(self, user_id: int) -> None:
+        logger.debug("Initiating logout", user_id=user_id)
+        if user_id < 0:
+            # Clean up anonymous user cache
+            user_data_str = await self.cache_manager.get(f"anon_user:{user_id}")
+            if user_data_str:
+                import json
+                user_data = json.loads(user_data_str)
+                username = user_data.get("username")
+                
+                await self.cache_manager.delete(f"anon_user:{user_id}")
+                if username:
+                    await self.cache_manager.delete(f"username_taken:{username}")
+                
+                logger.info("Anonymous user logged out and cache cleared", user_id=user_id)
+                await self.event_manager.emit("user.logged_out", {"id": user_id, "username": username})
+        else:
+            # For registered user (admin), get username first to delete user_by_username
+            user_data_str = await self.cache_manager.get(f"user:{user_id}")
+            if user_data_str:
+                import json
+                user_data = json.loads(user_data_str)
+                username = user_data.get("username")
+                if username:
+                    await self.cache_manager.delete(f"user_by_username:{username}")
+            
+            await self.cache_manager.delete(f"user:{user_id}")
+            logger.info("User logged out", user_id=user_id)
 
     async def refresh_session(self, refresh_token: str) -> Tuple[str, str]:
         import json
