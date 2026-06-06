@@ -1,5 +1,37 @@
 version: "3.9"
 
+# =============================================================================
+# Kairo — Docker Swarm Stack
+# =============================================================================
+# Deploy:
+#   docker stack deploy -c infra/swarm/docker-stack.yml kairo
+#
+# Pre-create all secrets on the swarm manager before deploying:
+#   echo "your_value" | docker secret create jwt_secret -
+#   echo "postgresql+asyncpg://..." | docker secret create database_url -
+#   echo "your_password" | docker secret create db_password -
+#   echo "your_key" | docker secret create s3_access_key -
+#   echo "your_key" | docker secret create s3_secret_key -
+#   echo "your_password" | docker secret create minio_root_password -
+#
+# No ENV variable is set → ConfigResolver runs in production mode.
+# =============================================================================
+
+secrets:
+  jwt_secret:
+    external: true
+  database_url:
+    external: true
+  db_password:
+    external: true
+  s3_access_key:
+    external: true
+  s3_secret_key:
+    external: true
+  minio_root_password:
+    external: true
+
+
 services:
 
   # =========================
@@ -28,7 +60,7 @@ services:
   # FRONTEND WEB (VITE + NGINX)
   # =========================
   web:
-    image: kairo/web:latest
+    image: ghcr.io/aaron-fredrick/kairo-web:latest
     networks:
       - kairo_net
     deploy:
@@ -39,11 +71,23 @@ services:
   # API SERVICE
   # =========================
   api:
-    image: kairo/api:latest
+    image: ghcr.io/aaron-fredrick/kairo-api:latest
     environment:
-      - DATABASE_URL=postgresql://kairo_api:kairo_api_password@postgres:5432/kairo
-      - REDIS_URL=redis://redis:6379
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel:4318
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: kairo
+      DB_USER: kairo
+      REDIS_HOST: redis
+      MINIO_ENDPOINT: http://storage:9000
+      STORAGE_BACKEND: minio
+      JWT_ALGORITHM: HS256
+      OTEL_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel:4318
+    secrets:
+      - jwt_secret
+      - database_url
+      - s3_access_key
+      - s3_secret_key
     networks:
       - kairo_net
     deploy:
@@ -54,11 +98,17 @@ services:
   # WEBSOCKETS SERVICE
   # =========================
   ws:
-    image: kairo/ws:latest
+    image: ghcr.io/aaron-fredrick/kairo-ws:latest
     environment:
-      - DATABASE_URL=postgresql://kairo_ws:kairo_ws_password@postgres:5432/kairo
-      - REDIS_URL=redis://redis:6379
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel:4318
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: kairo
+      DB_USER: kairo
+      REDIS_HOST: redis
+      OTEL_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel:4318
+    secrets:
+      - database_url
     networks:
       - kairo_net
     deploy:
@@ -70,11 +120,17 @@ services:
   # =========================
 
   worker_db:
-    image: kairo/worker-db:latest
+    image: ghcr.io/aaron-fredrick/kairo-worker-db:latest
     environment:
-      - DATABASE_URL=postgresql://kairo_db:kairo_db_password@postgres:5432/kairo
-      - REDIS_URL=redis://redis:6379
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel:4318
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: kairo
+      DB_USER: kairo
+      REDIS_HOST: redis
+      OTEL_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel:4318
+    secrets:
+      - database_url
     networks:
       - kairo_net
     deploy:
@@ -82,11 +138,17 @@ services:
 
 
   worker_thumbnail:
-    image: kairo/worker-thumbnail:latest
+    image: ghcr.io/aaron-fredrick/kairo-worker-thumbnail:latest
     environment:
-      - DATABASE_URL=postgresql://kairo_thumbnail:kairo_thumbnail_password@postgres:5432/kairo
-      - REDIS_URL=redis://redis:6379
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel:4318
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: kairo
+      DB_USER: kairo
+      REDIS_HOST: redis
+      OTEL_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel:4318
+    secrets:
+      - database_url
     networks:
       - kairo_net
     deploy:
@@ -94,11 +156,15 @@ services:
 
 
   worker_blob:
-    image: kairo/worker-blob:latest
+    image: ghcr.io/aaron-fredrick/kairo-worker-blob:latest
     environment:
-      - DATABASE_URL=postgresql://kairo_blob:kairo_blob_password@postgres:5432/kairo
-      - STORAGE_ENDPOINT=http://storage:9000
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel:4318
+      MINIO_ENDPOINT: http://storage:9000
+      STORAGE_BACKEND: minio
+      OTEL_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel:4318
+    secrets:
+      - s3_access_key
+      - s3_secret_key
     networks:
       - kairo_net
     deploy:
@@ -123,25 +189,35 @@ services:
     image: postgres:16
     environment:
       POSTGRES_USER: kairo
-      POSTGRES_PASSWORD: password
       POSTGRES_DB: kairo
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - db_password
     volumes:
       - pgdata:/var/lib/postgresql/data
     networks:
       - kairo_net
     deploy:
       replicas: 1
+      placement:
+        constraints: [node.role == manager]
 
 
   # =========================
-  # OBJECT STORAGE (MINIO / S3)
+  # OBJECT STORAGE (MINIO)
   # =========================
   storage:
     image: minio/minio
-    command: server /data --console-address ":9001"
+    # MinIO does not support the _FILE env convention; entrypoint reads the
+    # Docker secret and exports the real env var before launching the server.
+    entrypoint: >
+      /bin/sh -c
+      'export MINIO_ROOT_PASSWORD=$$(cat /run/secrets/minio_root_password) &&
+       minio server /data --console-address ":9001"'
     environment:
       MINIO_ROOT_USER: kairo
-      MINIO_ROOT_PASSWORD: password
+    secrets:
+      - minio_root_password
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -151,6 +227,8 @@ services:
       - kairo_net
     deploy:
       replicas: 1
+      placement:
+        constraints: [node.role == manager]
 
 
   # =========================
@@ -177,7 +255,7 @@ services:
     networks:
       - kairo_net
     deploy:
-      replicas: 1 # can be many, with shared storage for TSDB or other advanced setups
+      replicas: 1
 
 
   # =========================
@@ -213,6 +291,7 @@ services:
       - kairo_net
     deploy:
       replicas: 1
+
 
   # =========================
   # ALERTMANAGER

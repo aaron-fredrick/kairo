@@ -1,0 +1,125 @@
+# =============================================================================
+# Kairo — Local Full Stack (image-based)
+# =============================================================================
+# Usage:
+#   docker compose -f infra/compose/docker-compose.local.yml up -d
+#
+# Environment:
+#   .env present at project root  → ENV=development
+#   .env absent                   → production (secrets-only mode)
+#
+# Secrets are loaded from ../../secrets/*.txt and mounted at /run/secrets/
+# inside each container — matching ConfigResolver's expected paths.
+# =============================================================================
+
+name: kairo-local
+
+secrets:
+  jwt_secret:
+    file: ../../secrets/jwt_secret.txt
+  database_url:
+    file: ../../secrets/database_url.txt
+  db_password:
+    file: ../../secrets/db_password.txt
+  s3_access_key:
+    file: ../../secrets/s3_access_key.txt
+  s3_secret_key:
+    file: ../../secrets/s3_secret_key.txt
+  minio_root_password:
+    file: ../../secrets/minio_root_password.txt
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # API
+  # ---------------------------------------------------------------------------
+  api:
+    image: ghcr.io/aaron-fredrick/kairo-api:latest
+    env_file:
+      - path: ../../.env
+        required: false
+    environment:
+      DB_HOST: postgres
+      REDIS_HOST: redis
+      MINIO_ENDPOINT: http://storage:9000
+    secrets:
+      - jwt_secret
+      - database_url
+      - s3_access_key
+      - s3_secret_key
+    ports:
+      - "${API_PORT:-8000}:${API_PORT:-8000}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - kairo_net
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Postgres
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${DB_USER:-kairo}
+      POSTGRES_DB: ${DB_NAME:-kairo}
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - db_password
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - kairo_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-kairo} -d ${DB_NAME:-kairo}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Redis
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redisdata:/data
+    networks:
+      - kairo_net
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # MinIO (object storage)
+  # ---------------------------------------------------------------------------
+  storage:
+    image: minio/minio
+    # MinIO does not support the _FILE env convention; the entrypoint reads
+    # the Docker secret file and exports the real env var before starting.
+    entrypoint: >
+      /bin/sh -c
+      'export MINIO_ROOT_PASSWORD=$$(cat /run/secrets/minio_root_password) &&
+       minio server /data --console-address ":9001"'
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-kairo}
+    secrets:
+      - minio_root_password
+    volumes:
+      - minio:/data
+    ports:
+      - "7000:9000"
+      - "7001:9001"
+    networks:
+      - kairo_net
+    restart: unless-stopped
+
+networks:
+  kairo_net:
+    driver: bridge
+
+volumes:
+  pgdata:
+  redisdata:
+  minio:

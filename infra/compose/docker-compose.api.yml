@@ -1,0 +1,41 @@
+# =============================================================================
+# Kairo — API Only (image-based)
+# =============================================================================
+# Usage:
+#   docker compose -f infra/compose/docker-compose.api.yml up -d
+#
+# Use this when postgres, redis, and minio are managed externally (e.g. cloud
+# managed services or a separate compose stack). Point DB_HOST, REDIS_HOST,
+# and MINIO_ENDPOINT via .env or environment overrides.
+#
+# No ENV variable → production (secrets-only via ConfigResolver).
+# .env present    → development.
+# =============================================================================
+
+name: kairo-api
+
+secrets:
+  jwt_secret:
+    file: ../../secrets/jwt_secret.txt
+  database_url:
+    file: ../../secrets/database_url.txt
+  s3_access_key:
+    file: ../../secrets/s3_access_key.txt
+  s3_secret_key:
+    file: ../../secrets/s3_secret_key.txt
+
+services:
+
+  api:
+    image: ghcr.io/aaron-fredrick/kairo-api:latest
+    env_file:
+      - path: ../../.env
+        required: false
+    secrets:
+      - jwt_secret
+      - database_url
+      - s3_access_key
+      - s3_secret_key
+    ports:
+      - "${API_PORT:-8000}:${API_PORT:-8000}"
+    restart: unless-stopped

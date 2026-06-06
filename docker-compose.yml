@@ -1,12 +1,13 @@
-services:
-  kairo-server:
-    image: aaron-fredrick/kairo-server:latest
-    container_name: kairo-server-test
-    environment:
-      DB_BACKEND: sqlite
-      ENV: development
-      LOG_LEVEL: debug
-    volumes:
-      - "D:/projects/kairo/data:/usr/src/app/data"
-    ports:
-      - "8000:8000"
+# =============================================================================
+# Kairo — Root convenience alias
+# =============================================================================
+# This file forwards to the full local dev stack.
+# For the full set of variants see infra/compose/README.md.
+#
+# Usage:
+#   docker compose up -d                          # full local stack (images)
+#   docker compose -f docker-compose.yml up -d   # same
+# =============================================================================
+
+include:
+  - path: infra/compose/docker-compose.local.yml

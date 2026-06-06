@@ -1,0 +1,43 @@
+# =============================================================================
+# Kairo — API Only (source-mounted / test mode)
+# =============================================================================
+# Usage:
+#   docker compose -f infra/compose/docker-compose.api.test.yml up -d
+#
+# Runs the API from source with hot-reload. Infra (postgres, redis, minio)
+# must be running externally — update DB_HOST, REDIS_HOST, MINIO_ENDPOINT
+# in .env or via environment overrides.
+# =============================================================================
+
+name: kairo-api-test
+
+secrets:
+  jwt_secret:
+    file: ../../secrets/jwt_secret.txt
+  database_url:
+    file: ../../secrets/database_url.txt
+  s3_access_key:
+    file: ../../secrets/s3_access_key.txt
+  s3_secret_key:
+    file: ../../secrets/s3_secret_key.txt
+
+services:
+
+  api:
+    build:
+      context: ../../apps/api
+      dockerfile: Dockerfile
+    env_file:
+      - path: ../../.env
+        required: false
+    secrets:
+      - jwt_secret
+      - database_url
+      - s3_access_key
+      - s3_secret_key
+    volumes:
+      - ../../apps/api:/usr/src/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port ${API_PORT:-8000} --reload
+    ports:
+      - "${API_PORT:-8000}:${API_PORT:-8000}"
+    restart: unless-stopped

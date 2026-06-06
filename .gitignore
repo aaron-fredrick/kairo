@@ -72,6 +72,10 @@ data/
 *.swp
 *~
 
+# Secrets (real values gitignored; *.example files are committed as templates)
+secrets/*.txt
+!secrets/*.txt.example
+
 # Caddy / Tunnels (local Caddyfile is gitignored; use Caddyfile.example)
 Caddyfile
 !Caddyfile.example
