@@ -15,18 +15,18 @@ classDiagram
             +POST /auth/join
         }
         class MessagesRouter {
-            +GET /messages/{id}
+            +GET /messages/:id
         }
         class RoomsRouter {
             +GET /rooms
             +POST /rooms
-            +GET /rooms/{id}
-            +POST /rooms/{id}/add_user
+            +GET /rooms/:id
+            +POST /rooms/:id/add_user
         }
         class AttachmentsRouter {
-            +POST /attachments/upload/{msg_id}
-            +GET /attachments/download/{id}
-            +GET /attachments/{id}/thumbnail/{size}
+            +POST /attachments/upload/:msg_id
+            +GET /attachments/download/:id
+            +GET /attachments/:id/thumbnail/:size
         }
         class PresenceRouter {
             +POST /presence/heartbeat

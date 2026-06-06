@@ -1,0 +1,63 @@
+%%{init: {
+  "theme": "dark",
+  "sequence": {
+    "actorMargin": 60,
+    "messageMargin": 30,
+    "mirrorActors": false,
+    "noteMargin": 12,
+    "boxTextMargin": 6
+  }
+}}%%
+
+sequenceDiagram
+    %% ── Participants ──────────────────────────────────────────────────────────
+    actor       Client      as Client
+    participant Router      as AuthRouter<br/>[POST /auth/logout]
+    participant AuthGuard   as get_current_user_id<br/>[Depends — JWT guard]
+    participant AuthDep     as get_auth_service<br/>[Depends]
+    participant AuthSvc     as AuthService
+    participant Cache       as CacheManager<br/>[Redis]
+    participant EventMgr    as EventProtocol<br/>[event bus]
+
+    %% ── Flow ──────────────────────────────────────────────────────────────────
+    Client->>Router: POST /auth/logout<br/>Authorization: Bearer {access_token}
+
+    Router->>AuthGuard: decode JWT → user_id
+    AuthGuard-->>Router: user_id (int, negative = anonymous)
+
+    Router->>AuthDep: resolve AuthService
+    AuthDep-->>Router: AuthService instance
+
+    Router->>AuthSvc: logout(user_id)
+
+    alt user_id < 0  (anonymous user)
+        AuthSvc->>Cache: GET "anon_user:{user_id}"
+        Cache-->>AuthSvc: user_data JSON | None
+
+        opt user_data exists
+            AuthSvc->>Cache: DEL "anon_user:{user_id}"
+            Cache-->>AuthSvc: OK
+
+            AuthSvc->>Cache: DEL "username_taken:{username}"
+            Cache-->>AuthSvc: OK
+
+            AuthSvc->>EventMgr: emit("user.logged_out", { id, username })
+            EventMgr-->>AuthSvc: ack
+        end
+
+    else user_id >= 0  (registered user)
+        AuthSvc->>Cache: GET "user:{user_id}"
+        Cache-->>AuthSvc: user_data JSON | None
+
+        opt user_data exists
+            AuthSvc->>Cache: DEL "user_by_username:{username}"
+            Cache-->>AuthSvc: OK
+        end
+
+        AuthSvc->>Cache: DEL "user:{user_id}"
+        Cache-->>AuthSvc: OK
+    end
+
+    AuthSvc-->>Router: None
+
+    Router-->>Client: 200 OK<br/>{ "detail": "Successfully logged out" }

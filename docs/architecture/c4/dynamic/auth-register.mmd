@@ -1,0 +1,58 @@
+%%{init: {
+  "theme": "dark",
+  "sequence": {
+    "actorMargin": 60,
+    "messageMargin": 30,
+    "mirrorActors": false,
+    "noteMargin": 12,
+    "boxTextMargin": 6
+  }
+}}%%
+
+sequenceDiagram
+    %% ── Participants ──────────────────────────────────────────────────────────
+    actor       Client      as Client
+    participant Router      as AuthRouter<br/>[GET /auth/register]
+    participant AuthDep     as get_auth_service<br/>[Depends]
+    participant AuthSvc     as AuthService
+    participant Cache       as CacheManager<br/>[Redis]
+    participant Security    as security module<br/>[create_*_token]
+    participant EventMgr    as EventProtocol<br/>[event bus]
+
+    %% ── Flow ──────────────────────────────────────────────────────────────────
+    Client->>Router: GET /auth/register
+
+    Router->>AuthDep: resolve AuthService
+    AuthDep-->>Router: AuthService instance
+
+    Router->>AuthSvc: anonymous_join()
+
+    Note over AuthSvc: Generate unique username
+    loop Up to 10 attempts
+        AuthSvc->>Cache: exists("username_taken:{candidate}")
+        Cache-->>AuthSvc: true / false
+        alt candidate taken
+            Note over AuthSvc: Regenerate adj-noun-num
+        else candidate free
+            AuthSvc->>Cache: SET "username_taken:{username}" = "1"  TTL=refresh_ttl
+            Cache-->>AuthSvc: OK
+        end
+    end
+
+    Note over AuthSvc: Create user in memory<br/>user_id = –random(1M–9.9M)<br/>is_anonymous = true
+
+    AuthSvc->>Cache: SET "anon_user:{user_id}" = user_data  TTL=refresh_ttl
+    Cache-->>AuthSvc: OK
+
+    AuthSvc->>Security: create_access_token(sub=user_id)
+    Security-->>AuthSvc: access_token (JWT)
+
+    AuthSvc->>Security: create_refresh_token(sub=user_id)
+    Security-->>AuthSvc: refresh_token (JWT)
+
+    AuthSvc->>EventMgr: emit("user.registered", user_data)
+    EventMgr-->>AuthSvc: ack
+
+    AuthSvc-->>Router: (UserDomain, access_token, refresh_token)
+
+    Router-->>Client: 201 Created<br/>{ user, token: { access_token, refresh_token, token_type } }
