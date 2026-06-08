@@ -33,7 +33,7 @@ class CacheManager:
         await self.local_cache.set(
             key=key,
             value=value,
-            ttl=int(ttl / 2) if ttl else None,
+            ttl=int(ttl / 2) + 1 if ttl else None,
         )
         
         if self.redis_cache:

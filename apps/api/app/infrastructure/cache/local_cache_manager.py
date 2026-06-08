@@ -1,11 +1,13 @@
 import time
+from collections import OrderedDict
 from typing import Any
 
 
 class LocalCacheManager:
 
-    def __init__(self):
-        self._cache: dict[str, tuple[Any, float | None]] = {}
+    def __init__(self, max_size: int = 128):
+        self._cache: OrderedDict[str, tuple[Any, float | None]] = OrderedDict()
+        self._max_size = max_size
 
     def _is_expired(self, key: str) -> bool:
         item = self._cache.get(key)
@@ -24,11 +26,18 @@ class LocalCacheManager:
 
         return False
 
+    def _evict_lru(self) -> None:
+        if len(self._cache) >= self._max_size:
+            # Remove the least recently used item (first item in OrderedDict)
+            self._cache.popitem(last=False)
+
     async def get(self, key: str) -> Any | None:
         if self._is_expired(key):
             return None
 
         value, _ = self._cache[key]
+        # Move to end to mark as most recently used
+        self._cache.move_to_end(key)
         return value
 
     async def set(
@@ -42,6 +51,12 @@ class LocalCacheManager:
 
         if ttl is not None:
             expires_at = time.time() + ttl
+
+        # Remove if exists to re-insert at the end
+        if key in self._cache:
+            del self._cache[key]
+        else:
+            self._evict_lru()
 
         self._cache[key] = (value, expires_at)
 
