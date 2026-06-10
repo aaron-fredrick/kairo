@@ -4,6 +4,7 @@ from fastapi import Depends
 from app.api.dependencies.db import get_db_session
 from app.infrastructure.repositories.message_repository import MessageRepository
 from app.infrastructure.repositories.attachment_repository import AttachmentRepository
+from app.infrastructure.repositories.upload_repository import UploadRepository
 from app.infrastructure.repositories.room_repository import RoomRepository
 from app.infrastructure.repositories.user_repository import UserRepository
 
@@ -12,6 +13,9 @@ def get_message_repo(session: AsyncSession = Depends(get_db_session)) -> Message
 
 def get_attachment_repo(session: AsyncSession = Depends(get_db_session)) -> AttachmentRepository:
     return AttachmentRepository(session)
+
+def get_upload_repo(session: AsyncSession = Depends(get_db_session)) -> UploadRepository:
+    return UploadRepository(session)
 
 def get_room_repo(session: AsyncSession = Depends(get_db_session)) -> RoomRepository:
     return RoomRepository(session)
